@@ -1,6 +1,8 @@
 __pycache__/*
 */__pycache__/*
 ./*/*/__pycache__/*
-ui/pages/__pycache__/*
+*/*/__pycache__/*
 
 resources/*
+results/*
+*.pyc
