@@ -1,0 +1,21 @@
+# Web 框架
+gradio==5.23.3
+
+# 数据库
+SQLAlchemy==2.0.40
+
+# 图像处理
+Pillow==11.2.0
+opencv-python==4.11.0.86
+
+# 文件处理
+python-multipart==0.0.20
+
+# AI/ML 相关
+torch>=2.4.0
+transformers==4.50.3
+
+# 其他工具包
+numpy==2.2.4
+pandas>=2.2.3
+python-dotenv>=1.0.0

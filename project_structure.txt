@@ -1,0 +1,60 @@
+book_practice/
+│
+├── app/                          # 主应用目录
+│   ├── __init__.py
+│   ├── main.py                  # 主程序入口
+│   └── config.py                # 配置文件
+│
+├── modules/                     # 功能模块目录
+│   ├── __init__.py
+│   ├── upload/                  # 文件上传模块
+│   │   ├── __init__.py
+│   │   ├── upload_handler.py    # 文件上传处理
+│   │   └── file_validator.py    # 文件验证
+│   │
+│   ├── recognition/            # 作业识别模块
+│   │   ├── __init__.py
+│   │   ├── ocr_handler.py      # OCR识别处理
+│   │   ├── formula_detector.py  # 公式识别
+│   │   └── question_classifier.py # 题目分类
+│   │
+│   ├── storage/               # 数据存储模块
+│   │   ├── __init__.py
+│   │   ├── database.py        # 数据库操作
+│   │   └── feishu_sync.py     # 飞书同步
+│   │
+│   ├── search/               # 错题查询模块
+│   │   ├── __init__.py
+│   │   └── query_handler.py   # 查询处理
+│   │
+│   └── ai_generator/         # AI生成模块
+│       ├── __init__.py
+│       └── question_generator.py # 题目生成
+│
+├── ui/                       # 用户界面目录
+│   ├── __init__.py
+│   ├── components/          # UI组件
+│   │   ├── __init__.py
+│   │   ├── upload_component.py
+│   │   ├── search_component.py
+│   │   └── export_component.py
+│   │
+│   └── pages/              # 页面布局
+│       ├── __init__.py
+│       ├── home_page.py
+│       ├── upload_page.py
+│       └── search_page.py
+│
+├── utils/                  # 工具函数目录
+│   ├── __init__.py
+│   ├── file_utils.py      # 文件处理工具
+│   ├── image_utils.py     # 图像处理工具
+│   └── export_utils.py    # 导出工具
+│
+├── models/                # 数据模型目录
+│   ├── __init__.py
+│   └── database_models.py # 数据库模型
+│
+└── tests/                # 测试目录
+    ├── __init__.py
+    └── test_modules/     # 模块测试
