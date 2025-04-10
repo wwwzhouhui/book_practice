@@ -1,0 +1,61 @@
+{
+  "sheets": [
+    {
+      "section_number": "1",
+      "section_title": "",
+      "table_data": {
+        "headers": [
+          "节目",
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "rows": [
+          [
+            "演员人数",
+            10,
+            2,
+            10,
+            1
+          ],
+          [
+            "彩排时長",
+            30,
+            10,
+            20,
+            10
+          ]
+        ]
+      },
+      "question_text": [
+        {
+          "_id_": "_q_1",
+          "_text_": [
+            {
+              "type": "printed_text",
+              "_content_": "已知每位演员只参演一個节目。一位演员的彩排时间是从第一个彩排的节目彩排开始到位"
+            },
+            {
+              "type": "handwriten",
+              "color": "red",
+              "content": "演員的節目的彩排開始的时间间隔（不含換場時間等其他因素）. 若節目的順後順先後顺序排列，則節目的D的演員的候場時間為"
+            },
+            {
+              "type": "handwriten",
+              "color": "red",
+              "content": ""
+            },
+            {
+              "type": "handwriten",
+              "color": "blue",
+              "content": ""
+            }
+          ],
+          "answer": "60分钟",
+          "explanation": "假设节目按照A、B、C、D的顺序排列，节目D的候场时间是从第一个节目开始到D开始的时间间隔。因此，D的候场时间等于前三个节目彩排时间的总和：A的30分钟 + B的10分钟 + C的20分钟 = 60分钟。"
+        }
+      ]
+    }
+  ]
+}
