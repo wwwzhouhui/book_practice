@@ -62,7 +62,16 @@ def create_search_page():
                 refresh_button = gr.Button("显示所有错题", variant="primary")
             
             with gr.Column(scale=2):
-                export_button = gr.Button("导出结果", variant="secondary")
+                export_format = gr.Dropdown(
+                    choices=["CSV", "PDF", "Word", "图片(A4)"],
+                    label="导出格式",
+                    value="PDF"
+                )
+            
+            with gr.Column(scale=3):
+                with gr.Row():
+                    export_questions_button = gr.Button("导出题目", variant="secondary")
+                    export_answers_button = gr.Button("导出答案", variant="secondary")
                 
             with gr.Column(scale=2):
                 delete_button = gr.Button("删除选中错题", variant="stop")
@@ -127,6 +136,7 @@ def create_search_page():
                 return f"加载数据出错: {str(e)}", empty_df
         
         # 搜索功能实现
+# 搜索功能实现 - 优化题号搜索
         def search_questions(search_text, subjects, time_range):
             logger.info(f"搜索条件: {search_text}, {subjects}, {time_range}")
             try:
@@ -143,20 +153,48 @@ def create_search_page():
                     limit=100
                 )
                 
-                # 如果有搜索关键词，进行简单过滤
+                # 如果有搜索关键词，进行过滤
                 if search_text:
-                    search_text = search_text.lower()
+                    search_text = search_text.strip().lower()
                     filtered_questions = []
+                    
+                    # 检查是否包含多个题号（用空格分隔）
+                    search_terms = search_text.split()
+                    
+                    # 如果全部是数字，则认为是搜索题号
+                    are_all_numbers = all(term.isdigit() for term in search_terms)
+                    
                     for q in questions:
-                        # 按题号搜索
-                        if str(q["id"]) == search_text:
-                            filtered_questions.append(q)
-                            continue
-                            
-                        # 按题目内容搜索
-                        if search_text in q["question_text"].lower():
-                            filtered_questions.append(q)
-                            continue
+                        question_id_str = str(q["id"])
+                        
+                        # 匹配多个题号的情况
+                        if are_all_numbers:
+                            # 精确匹配完整题号 - 检查题号是否在搜索词列表中
+                            if question_id_str in search_terms:
+                                filtered_questions.append(q)
+                                continue
+                                
+                            # 匹配题号中包含任一搜索数字
+                            for term in search_terms:
+                                if term in question_id_str:
+                                    filtered_questions.append(q)
+                                    break
+                        # 按单个搜索词处理
+                        else:
+                            # 精确匹配题号
+                            if question_id_str == search_text:
+                                filtered_questions.append(q)
+                                continue
+                                
+                            # 题号包含搜索文本
+                            if search_text in question_id_str:
+                                filtered_questions.append(q)
+                                continue
+                                
+                            # 按题目内容搜索
+                            if search_text in q["question_text"].lower():
+                                filtered_questions.append(q)
+                                continue
                     
                     questions = filtered_questions
                 
@@ -364,8 +402,37 @@ def create_search_page():
                 logger.error(traceback.format_exc())
                 return [gr.update(visible=False), "", "", "", "", "", "", "", "", -1, None]
         
-        # 导出功能
-        def export_results(dataframe):
+        # 辅助函数：文本换行处理
+        def textwrap_text(text, font, max_width):
+            """将文本按照给定宽度分割成多行"""
+            words = text.split()
+            lines = []
+            current_line = words[0] if words else ""
+            
+            for word in words[1:]:
+                # 计算添加新单词后的宽度
+                test_line = current_line + " " + word
+                width = font.getmask(test_line).getbbox()[2]
+                
+                if width <= max_width:
+                    current_line = test_line
+                else:
+                    lines.append(current_line)
+                    current_line = word
+            
+            lines.append(current_line)  # 添加最后一行
+            return lines
+        
+        # 增强的导出功能 - 修改为支持只导出题目或只导出答案
+        def export_results(dataframe, export_format="CSV", content_type="questions"):
+            """
+            导出错题数据
+            
+            参数:
+            dataframe: 要导出的数据
+            export_format: 导出格式，可选 CSV, PDF, Word, 图片(A4)
+            content_type: 内容类型，可选 questions(只有题目), answers(只有答案)
+            """
             if dataframe is None:
                 return "没有可导出的数据"
             
@@ -393,26 +460,387 @@ def create_search_page():
                 # 创建导出目录
                 export_dir = os.path.join(os.getcwd(), "exports")
                 os.makedirs(export_dir, exist_ok=True)
-                
-                # 导出为CSV
                 timestamp = time.strftime("%Y%m%d_%H%M%S")
-                csv_path = os.path.join(export_dir, f"错题数据_{timestamp}.csv")
                 
-                with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                    fieldnames = ["id", "subject", "question_type", "difficulty", 
-                                  "question_text", "answer", "user_answer", 
-                                  "explanation", "created_at"]
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-                    for item in full_data:
-                        writer.writerow(item)
+                # 根据内容类型设置文件名
+                if content_type == "questions":
+                    file_suffix = "题目"
+                else:
+                    file_suffix = "答案"
                 
-                return f"✅ 已成功导出 {len(full_data)} 条数据至：{csv_path}"
+                # 根据选择的格式导出
+                if export_format == "CSV":
+                    # CSV导出
+                    csv_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.csv")
+                    
+                    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                        if content_type == "questions":
+                            # 只导出题目部分
+                            fieldnames = ["id", "subject", "question_type", "difficulty", "question_text"]
+                        else:
+                            # 只导出答案部分
+                            fieldnames = ["id", "subject", "question_type", "answer", "explanation"]
+                        
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        
+                        for item in full_data:
+                            # 筛选需要的字段
+                            row = {field: item.get(field, '') for field in fieldnames}
+                            writer.writerow(row)
+                    
+                    return f"✅ 已成功导出 {len(full_data)} 条{file_suffix}至CSV文件：{csv_path}"
+                    
+                elif export_format == "PDF":
+                    try:
+                        # 导入所需模块
+                        import reportlab.lib.pagesizes as pagesizes
+                        import reportlab.platypus as platypus
+                        import reportlab.lib.styles as styles
+                        import reportlab.lib.colors as colors
+                        import reportlab.lib.enums as enums
+                        
+                        # 添加中文字体支持
+                        from reportlab.pdfbase import pdfmetrics
+                        from reportlab.pdfbase.ttfonts import TTFont
+                        
+                        # 注册中文字体 - 尝试多个路径
+                        font_registered = False
+                        font_paths = [
+                            # Windows 字体路径
+                            "C:/Windows/Fonts/simhei.ttf",
+                            "C:/Windows/Fonts/simsun.ttc",
+                            # Linux 字体路径
+                            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+                            # macOS 字体路径
+                            "/System/Library/Fonts/PingFang.ttc",
+                            # 项目内字体（如果有）
+                            os.path.join(os.getcwd(), "fonts", "simhei.ttf"),
+                        ]
+                        
+                        for font_path in font_paths:
+                            if os.path.exists(font_path):
+                                try:
+                                    logger.info(f"尝试注册字体: {font_path}")
+                                    # 注册字体
+                                    pdfmetrics.registerFont(TTFont('SimHei', font_path))
+                                    font_registered = True
+                                    logger.info(f"成功注册字体: {font_path}")
+                                    break
+                                except Exception as font_error:
+                                    logger.error(f"注册字体失败: {str(font_error)}")
+                                    continue
+                        
+                        # 创建PDF文档
+                        pdf_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.pdf")
+                        doc = platypus.SimpleDocTemplate(pdf_path, pagesize=pagesizes.A4)
+                        
+                        # 创建自定义样式
+                        style_sheet = styles.getSampleStyleSheet()
+                        
+                        # 修改所有样式以使用中文字体
+                        if font_registered:
+                            for style_name in style_sheet.byName:
+                                style_sheet[style_name].fontName = 'SimHei'
+                        
+                        title_style = styles.ParagraphStyle(
+                            'CustomTitle',
+                            parent=style_sheet['Title'],
+                            fontName='SimHei' if font_registered else style_sheet['Title'].fontName,
+                            textColor=colors.HexColor('#003399'),
+                            alignment=enums.TA_CENTER,
+                            spaceAfter=10
+                        )
+                        
+                        heading_style = styles.ParagraphStyle(
+                            'CustomHeading',
+                            parent=style_sheet['Heading2'],
+                            fontName='SimHei' if font_registered else style_sheet['Heading2'].fontName,
+                            textColor=colors.HexColor('#0066CC'),
+                            spaceBefore=15
+                        )
+                        
+                        elements = []
+                        
+                        # 添加标题
+                        elements.append(platypus.Paragraph(f"错题集 - {file_suffix}", title_style))
+                        elements.append(platypus.Spacer(1, 12))
+                        
+                        # 遍历每道题目
+                        for i, question in enumerate(full_data, 1):
+                            if content_type == "questions":
+                                # 导出题目部分
+                                # 题目标题
+                                elements.append(platypus.Paragraph(f"题目 {i}: {question['subject']} - {question['question_type']}", heading_style))
+                                
+                                # 题目内容
+                                elements.append(platypus.Paragraph(question["question_text"], style_sheet['Normal']))
+                            else:
+                                # 导出答案部分
+                                # 标题简化显示题号
+                                elements.append(platypus.Paragraph(f"题目 {i} 答案:", heading_style))
+                                
+                                # 显示答案
+                                elements.append(platypus.Paragraph(f"<b><font color='#008000'>正确答案:</font></b> {question['answer']}", style_sheet['Normal']))
+                                
+                                # 解析
+                                if question.get("explanation"):
+                                    elements.append(platypus.Spacer(1, 5))
+                                    elements.append(platypus.Paragraph("<b><font color='#4682B4'>解析:</font></b>", style_sheet['Normal']))
+                                    elements.append(platypus.Paragraph(question["explanation"], style_sheet['Normal']))
+                            
+                            # 添加分隔线
+                            if i < len(full_data):  # 最后一题不添加分隔线
+                                elements.append(platypus.Spacer(1, 10))
+                                
+                                # 创建简单表格作为分隔线
+                                data = [['']]
+                                line_table = platypus.Table(data, colWidths=[450], rowHeights=[1])
+                                line_table.setStyle([('LINEABOVE', (0, 0), (-1, -1), 1, colors.gray)])
+                                elements.append(line_table)
+                                
+                                elements.append(platypus.Spacer(1, 15))
+                        
+                        # 生成PDF
+                        doc.build(elements)
+                        return f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至PDF文件：{pdf_path}"
+                    
+                    except Exception as e:
+                        logger.error(f"PDF导出过程中出错: {str(e)}")
+                        logger.error(traceback.format_exc())
+                        
+                        # 检查是否是ImportError
+                        if isinstance(e, ImportError):
+                            return f"❌ 导出PDF需要安装reportlab库，请使用命令：pip install reportlab"
+                        else:
+                            return f"❌ PDF导出失败: {str(e)}"
+                    
+                elif export_format == "Word":
+                    try:
+                        # 使用python-docx导出Word文档
+                        from docx import Document
+                        from docx.shared import RGBColor
+                        
+                        doc_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.docx")
+                        doc = Document()
+                        
+                        # 添加标题
+                        title = doc.add_heading(f"错题集 - {file_suffix}", 0)
+                        title.alignment = 1  # 居中对齐
+                        
+                        # 遍历每道题目
+                        for i, question in enumerate(full_data, 1):
+                            if content_type == "questions":
+                                # 导出题目部分
+                                # 题目标题
+                                heading = doc.add_heading(f"题目 {i}: {question['subject']} - {question['question_type']}", level=2)
+                                
+                                # 设置标题颜色为蓝色
+                                for run in heading.runs:
+                                    run.font.color.rgb = RGBColor(0, 102, 204)
+                                
+                                # 题目内容
+                                doc.add_paragraph(question["question_text"])
+                            else:
+                                # 导出答案部分
+                                # 标题
+                                heading = doc.add_heading(f"题目 {i} 答案:", level=2)
+                                
+                                # 设置标题颜色为蓝色
+                                for run in heading.runs:
+                                    run.font.color.rgb = RGBColor(0, 102, 204)
+                                
+                                # 答案
+                                p = doc.add_paragraph()
+                                correct_run = p.add_run("正确答案: ")
+                                correct_run.bold = True
+                                correct_run.font.color.rgb = RGBColor(0, 128, 0)  # 绿色
+                                p.add_run(question['answer'])
+                                
+                                # 解析
+                                if question.get("explanation"):
+                                    p = doc.add_paragraph()
+                                    explain_run = p.add_run("解析: ")
+                                    explain_run.bold = True
+                                    explain_run.font.color.rgb = RGBColor(70, 130, 180)  # 钢蓝色
+                                    p.add_run(question["explanation"])
+                            
+                            # 除最后一题外，添加分隔线
+                            if i < len(full_data):
+                                doc.add_paragraph("_" * 50)
+                        
+                        # 保存文档
+                        doc.save(doc_path)
+                        return f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至Word文档：{doc_path}"
+                    except ImportError:
+                        return "❌ 导出Word需要安装python-docx库，请使用命令：pip install python-docx"
+                    
+                elif export_format == "图片(A4)":
+                    try:
+                        # 使用PIL生成A4尺寸的可打印图片
+                        from PIL import Image, ImageDraw, ImageFont
+                        import math
+                        
+                        # 创建图片保存目录
+                        img_dir = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}")
+                        os.makedirs(img_dir, exist_ok=True)
+                        
+                        # A4纸像素尺寸（300DPI）
+                        width, height = 2480, 3508  # A4尺寸，300DPI
+                        
+                        # 计算需要多少页
+                        items_per_page = 3  # 每页题目数
+                        total_pages = math.ceil(len(full_data) / items_per_page)
+                        
+                        # 字体设置 - 使用更通用的字体路径或内置字体
+                        # 尝试多种字体路径以提高兼容性
+                        font_paths = [
+                            # Windows 字体路径
+                            "C:/Windows/Fonts/simhei.ttf",
+                            "C:/Windows/Fonts/simsun.ttc",
+                            # Linux 字体路径
+                            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+                            # macOS 字体路径
+                            "/System/Library/Fonts/PingFang.ttc",
+                            # 项目内字体（如果有）
+                            os.path.join(os.getcwd(), "fonts", "simhei.ttf"),
+                        ]
+                        
+                        # 尝试加载字体，直到成功或全部失败
+                        title_font = None
+                        heading_font = None
+                        normal_font = None
+                        
+                        for font_path in font_paths:
+                            if os.path.exists(font_path):
+                                try:
+                                    title_font = ImageFont.truetype(font_path, 60)
+                                    heading_font = ImageFont.truetype(font_path, 45)
+                                    normal_font = ImageFont.truetype(font_path, 35)
+                                    logger.info(f"成功加载字体: {font_path}")
+                                    break
+                                except Exception as e:
+                                    logger.error(f"加载字体 {font_path} 失败: {e}")
+                                    continue
+                        
+                        # 如果所有字体都加载失败，使用默认字体
+                        if title_font is None:
+                            logger.warning("无法加载任何中文字体，使用默认字体")
+                            title_font = ImageFont.load_default()
+                            heading_font = ImageFont.load_default()
+                            normal_font = ImageFont.load_default()
+                        
+                        # 生成每一页
+                        for page in range(total_pages):
+                            # 创建空白图片（白色背景）
+                            img = Image.new('RGB', (width, height), (255, 255, 255))
+                            draw = ImageDraw.Draw(img)
+                            
+                            # 绘制标题和页眉线条
+                            draw.text((width//2 - 250, 100), f"错题集 - {file_suffix}", font=title_font, fill=(0, 51, 153))  # 深蓝色标题
+                            draw.line([(80, 170), (width-80, 170)], fill=(0, 102, 204), width=2)  # 蓝色分隔线
+                            
+                            # 当前页的题目
+                            start_idx = page * items_per_page
+                            end_idx = min(start_idx + items_per_page, len(full_data))
+                            current_questions = full_data[start_idx:end_idx]
+                            
+                            # 绘制每道题目
+                            y_position = 250
+                            for i, question in enumerate(current_questions, start_idx + 1):
+                                if content_type == "questions":
+                                    # 题目部分
+                                    # 题目标题 - 使用蓝色
+                                    title_text = f"题目 {i}: {question['subject']} - {question['question_type']}"
+                                    draw.text((100, y_position), title_text, font=heading_font, fill=(0, 102, 204))
+                                    y_position += 70
+                                    
+                                    # 题目内容
+                                    content_text = question["question_text"]
+                                    
+                                    # 手动处理文本换行 - 简化处理
+                                    # 每行最大字符数（根据字体大小估算）
+                                    max_chars_per_line = 65  
+                                    
+                                    # 分行处理
+                                    lines = []
+                                    for paragraph in content_text.split('\n'):
+                                        if len(paragraph) <= max_chars_per_line:
+                                            lines.append(paragraph)
+                                        else:
+                                            # 长段落按字符数分行
+                                            for j in range(0, len(paragraph), max_chars_per_line):
+                                                lines.append(paragraph[j:j+max_chars_per_line])
+                                    
+                                    # 绘制题目内容
+                                    for line in lines:
+                                        draw.text((100, y_position), line, font=normal_font, fill=(0, 0, 0))
+                                        y_position += 45
+                                else:
+                                    # 答案部分
+                                    # 标题
+                                    title_text = f"题目 {i} 答案:"
+                                    draw.text((100, y_position), title_text, font=heading_font, fill=(0, 102, 204))
+                                    y_position += 70
+                                    
+                                    # 答案
+                                    draw.text((100, y_position), "正确答案:", font=normal_font, fill=(0, 128, 0))  # 绿色
+                                    draw.text((300, y_position), question['answer'], font=normal_font, fill=(0, 0, 0))
+                                    y_position += 70
+                                    
+                                    # 解析
+                                    if question.get("explanation"):
+                                        draw.text((100, y_position), "解析:", font=normal_font, fill=(70, 130, 180))  # 钢蓝色
+                                        y_position += 50
+                                        
+                                        # 分行处理解析文本
+                                        explanation_lines = []
+                                        for paragraph in question["explanation"].split('\n'):
+                                            if len(paragraph) <= max_chars_per_line:
+                                                explanation_lines.append(paragraph)
+                                            else:
+                                                for j in range(0, len(paragraph), max_chars_per_line):
+                                                    explanation_lines.append(paragraph[j:j+max_chars_per_line])
+                                        
+                                        for line in explanation_lines:
+                                            draw.text((100, y_position), line, font=normal_font, fill=(0, 0, 0))
+                                            y_position += 45
+                                
+                                # 添加分隔线
+                                y_position += 50
+                                draw.line([(150, y_position), (width-150, y_position)], fill=(200, 200, 200), width=1)
+                                y_position += 60
+                            
+                            # 添加页码和页脚线
+                            draw.line([(80, height-150), (width-80, height-150)], fill=(0, 102, 204), width=1)
+                            draw.text((width//2 - 80, height - 100), f"第 {page+1}/{total_pages} 页", 
+                                    font=normal_font, fill=(102, 102, 102))
+                            
+                            # 保存图片
+                            img_path = os.path.join(img_dir, f"错题_{file_suffix}_第{page+1}页.png")
+                            img.save(img_path, "PNG")
+                        
+                        return f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至 {total_pages} 页图片：{img_dir}"
+                    except ImportError:
+                        return "❌ 导出图片需要安装Pillow库，请使用命令：pip install Pillow"
+                    except Exception as e:
+                        logger.error(f"导出图片时出错: {str(e)}")
+                        logger.error(traceback.format_exc())
+                        return f"❌ 导出图片时出错: {str(e)}"
+                
+                else:
+                    return f"❌ 不支持的导出格式: {export_format}"
+                
             except Exception as e:
                 logger.error(f"导出失败: {str(e)}")
                 logger.error(traceback.format_exc())
                 return f"❌ 导出失败: {str(e)}"
         
+        def export_questions(dataframe, export_format):
+            return export_results(dataframe, export_format, content_type="questions")
+
+        def export_answers(dataframe, export_format):
+            return export_results(dataframe, export_format, content_type="answers")
         # 返回列表视图
         def back_to_list():
             return [gr.update(visible=False), "", "", "", "", "", "", "", "", -1, None]
@@ -491,9 +919,16 @@ def create_search_page():
             ]
         )
         
-        export_button.click(
-            export_results,
-            inputs=[results],
+        # 绑定两个导出按钮，分别导出题目和答案
+        export_questions_button.click(
+            export_questions,
+            inputs=[results, export_format],
+            outputs=[status]
+        )
+
+        export_answers_button.click(
+            export_answers,
+            inputs=[results, export_format],
             outputs=[status]
         )
         
