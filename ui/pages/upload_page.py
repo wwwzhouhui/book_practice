@@ -17,11 +17,12 @@ sys.path.append(str(project_root))
 from modules.storage.database import Database
 from modules.image_processing.image_processor import ImageProcessor
 
-def process_images(files, progress=gr.Progress()):
+def process_images(files, subject, progress=gr.Progress()):
     """处理上传的图像文件
     
     Args:
         files: 上传的文件列表
+        subject: 选择的学科
         progress: Gradio进度条
         
     Returns:
@@ -37,12 +38,12 @@ def process_images(files, progress=gr.Progress()):
     file_paths = [file.name for file in files]
     
     # 更新进度
-    progress(0, desc="正在准备处理...")
+    progress(0, desc=f"正在准备处理{subject}作业...")
     
     # 处理图像
     try:
         # 处理图像
-        results = processor.process_images(file_paths)
+        results = processor.process_images(file_paths, subject=subject)  # 传入subject参数
         
         # 更新进度
         progress(1, desc="处理完成")
@@ -69,9 +70,17 @@ def process_images(files, progress=gr.Progress()):
         logger.error(f"处理图像时出错: {str(e)}")
         return None, f"处理失败: {str(e)}"
 
+def get_example_images():
+    """获取示例图片列表"""
+    resources_path = Path(__file__).parent.parent.parent / "resources"
+    example_images = []
+    if resources_path.exists():
+        for file in resources_path.glob("*.png"):
+            example_images.append(str(file))
+    return example_images
+
 def create_upload_page():
     """创建作业上传页面"""
-    # 初始化数据库
     db = Database()
     
     with gr.Column() as upload_page:
@@ -80,6 +89,22 @@ def create_upload_page():
         with gr.Tabs() as upload_tabs:
             # 图片上传标签页
             with gr.TabItem("图片上传"):
+                subject_select = gr.Dropdown(
+                    choices=["数学", "物理", "化学"],
+                    label="选择学科",
+                    value="数学"
+                )
+                
+                # 添加示例图片展示区域
+                example_gallery = gr.Gallery(
+                    label="题库案例（双击选择）",
+                    value=get_example_images(),
+                    columns=4,
+                    height=200,
+                    show_label=True,
+                    elem_id="example_gallery"
+                )
+                
                 # 上传作业部分
                 with gr.Row():
                     with gr.Column(scale=2):
@@ -93,7 +118,17 @@ def create_upload_page():
                     with gr.Column(scale=3):
                         preview = gr.Image(label="预览", show_label=True)
                         status = gr.Textbox(label="处理状态", lines=8)
-            
+
+                # 添加双击事件处理
+                def gallery_select(evt: gr.SelectData):
+                    selected_path = get_example_images()[evt.index]
+                    return selected_path  # 直接返回文件路径字符串
+
+                example_gallery.select(
+                    fn=gallery_select,
+                    inputs=[],
+                    outputs=[file_input]
+                )
             # 手动录入标签页
             with gr.TabItem("手动录入"):
                 with gr.Group():
@@ -255,7 +290,7 @@ def create_upload_page():
         # 使用Gradio 5.x的进度条功能
         upload_button.click(
             fn=process_images,
-            inputs=[file_input],
+            inputs=[file_input, subject_select],  # 添加subject_select作为输入
             outputs=[preview, status]
         )
         

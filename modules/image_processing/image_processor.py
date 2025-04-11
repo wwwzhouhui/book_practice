@@ -184,7 +184,7 @@ class ResultFormatter:
 class ImageProcessor:
     """处理考试试卷图片，提取文本和问题"""
     
-    def __init__(self, api_key: str = "CSW0YJEY0AJVXWFS", use_mock: bool = True):
+    def __init__(self, api_key: str = "CSW0YJEY0AJVXWFSOA6CKRI6H06UAJUYK7IS1LBZ", use_mock: bool =False):
         """
         初始化图像处理器
         
@@ -210,8 +210,8 @@ class ImageProcessor:
         Returns:
             处理后的图像和原始图像
         """
-        # 读取图像
-        img = cv2.imread(image_path)
+        # 使用numpy读取图像以支持中文路径
+        img = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError(f"无法读取图像: {image_path}")
             
@@ -342,12 +342,13 @@ class ImageProcessor:
         
         return result
     
-    def extract_text_from_image(self, image_path: str) -> Dict[str, Any]:
+    def extract_text_from_image(self, image_path: str, subject: str = "数学") -> Dict[str, Any]:
         """
         使用Qwen2.5-VL-32B-Instruct从图像中提取文本和问题
         
         Args:
             image_path: 图像文件路径
+            subject: 学科名称，默认为"数学"
             
         Returns:
             包含提取文本和结构的字典
@@ -445,12 +446,13 @@ class ImageProcessor:
             logger.error(f"验证和回答问题时出错: {e}")
             return {"error": str(e)}
     
-    def process_images(self, image_paths: List[str]) -> Dict[str, Any]:
+    def process_images(self, image_paths: List[str], subject: str = "数学") -> Dict[str, Any]:
         """
         处理多张试卷图像
         
         Args:
             image_paths: 图像文件路径列表
+            subject: 学科名称，默认为"数学"
             
         Returns:
             处理结果
@@ -458,11 +460,11 @@ class ImageProcessor:
         results = []
         
         for image_path in image_paths:
-            logger.info(f"正在处理图像: {image_path}")
+            logger.info(f"正在处理{subject}科目图像: {image_path}")
             
             try:
                 # 1. 从图像中提取文本和问题
-                extraction_result = self.extract_text_from_image(image_path)
+                extraction_result = self.extract_text_from_image(image_path, subject)
                 
                 if "error" in extraction_result:
                     results.append({
