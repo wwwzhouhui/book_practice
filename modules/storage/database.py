@@ -38,6 +38,36 @@ class Database:
         Base.metadata.create_all(self.engine)
         
         logger.info(f"数据库初始化完成: {db_path}")
+        
+        # 检查错题数量，如果为空则自动生成示例数据
+        self.initialize_sample_data_if_empty()
+    
+    def initialize_sample_data_if_empty(self, min_count=5):
+        """如果数据库为空，则初始化示例数据
+        
+        Args:
+            min_count: 至少需要的错题数量
+        """
+        try:
+            count = self.get_error_count()
+            if count < min_count:
+                logger.info(f"数据库错题数量不足({count}<{min_count})，自动生成示例数据")
+                self.generate_sample_data(count=20)  # 生成20条示例错题
+                logger.info("示例数据生成完成")
+        except Exception as e:
+            logger.error(f"初始化示例数据失败: {str(e)}")
+    
+    def get_error_count(self):
+        """获取错题总数"""
+        session = self.Session()
+        try:
+            count = session.query(ErrorQuestion).count()
+            return count
+        except Exception as e:
+            logger.error(f"获取错题数量失败: {str(e)}")
+            return 0
+        finally:
+            session.close()
     
     def add_error_question(self, question_data):
         """添加错题
@@ -71,11 +101,24 @@ class Database:
         Returns:
             错题字典，不存在则返回None
         """
+        if question_id is None:
+            logger.warning("获取错题时ID为None")
+            return None
+            
         session = self.Session()
         try:
+            # 尝试转换ID为整数（如果是字符串）
+            if isinstance(question_id, str):
+                try:
+                    question_id = int(question_id)
+                except ValueError:
+                    logger.error(f"无效的错题ID格式: {question_id}")
+                    return None
+                    
+            logger.info(f"尝试获取错题: ID={question_id}")
             question = session.query(ErrorQuestion).filter_by(id=question_id).first()
             if question:
-                logger.debug(f"获取错题: ID={question_id}")
+                logger.debug(f"成功获取错题: ID={question_id}")
                 return question.to_dict()
             else:
                 logger.warning(f"错题不存在: ID={question_id}")
@@ -155,10 +198,30 @@ class Database:
         Returns:
             是否更新成功
         """
+        if question_id is None:
+            logger.warning("更新错题时ID为None")
+            return False
+            
         session = self.Session()
         try:
+            # 尝试转换ID为整数（如果是字符串）
+            if isinstance(question_id, str):
+                try:
+                    question_id = int(question_id)
+                except ValueError:
+                    logger.error(f"无效的错题ID格式: {question_id}")
+                    return False
+            
+            # 先检查错题是否存在
+            question = session.query(ErrorQuestion).filter_by(id=question_id).first()
+            if not question:
+                logger.warning(f"要更新的错题不存在: ID={question_id}")
+                return False
+                
+            # 执行更新
             result = session.query(ErrorQuestion).filter_by(id=question_id).update(update_data)
             session.commit()
+            
             if result > 0:
                 logger.info(f"更新错题成功: ID={question_id}")
             else:
@@ -180,6 +243,10 @@ class Database:
         Returns:
             是否删除成功
         """
+        if question_id is None:
+            logger.warning("删除错题时ID为None")
+            return False
+            
         session = self.Session()
         try:
             # 确保ID是整数
@@ -356,6 +423,43 @@ class Database:
         finally:
             session.close()
     
+    def verify_data_consistency(self):
+        """验证数据一致性，删除无效记录
+        
+        Returns:
+            已清理的记录数
+        """
+        session = self.Session()
+        try:
+            # 获取所有记录
+            questions = session.query(ErrorQuestion).all()
+            
+            # 检查记录完整性
+            cleaned_count = 0
+            for q in questions:
+                # 检查必要字段
+                if not q.question_text or not q.subject:
+                    logger.warning(f"删除无效错题记录: ID={q.id}, 原因=缺少必要字段")
+                    session.delete(q)
+                    cleaned_count += 1
+                    continue
+                
+                # 规范化难度值
+                if q.difficulty < 1 or q.difficulty > 5:
+                    logger.warning(f"修正错题难度: ID={q.id}, 原值={q.difficulty}")
+                    q.difficulty = max(1, min(5, q.difficulty))
+            
+            if cleaned_count > 0:
+                session.commit()
+                logger.info(f"数据一致性验证完成: 删除了 {cleaned_count} 条无效记录")
+            return cleaned_count
+        except Exception as e:
+            session.rollback()
+            logger.error(f"数据一致性验证失败: {str(e)}")
+            return 0
+        finally:
+            session.close()
+    
     def get_statistics(self):
         """获取统计数据
         
@@ -430,7 +534,6 @@ class Database:
             }
         finally:
             session.close()
-
 
     def batch_add_error_questions(self, result_json: dict) -> None:
         """批量添加错题数据
