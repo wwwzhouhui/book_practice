@@ -65,14 +65,14 @@ use_stream = False
 
 # 发送请求
 response = requests.post(
-    url="https://openrouter.ai/api/v1/chat/completions",
+    url="https://api.302.ai/v1/chat/completions",
     headers={
-        "Authorization": "Bearer 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",
+        "Authorization": "Bearer sk-Udf6lsiyUIExHTrE0kXxAXpYemjY9SzvU0EXmYbgbUSlzCeE",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/traefan/book_practice",
     },
     json={
-        "model": "google/gemini-2.5-pro-exp-03-25:free",
+        "model": "gemini-2.0-flash-lite-preview-02-05",
         "stream": use_stream,
         "messages": [
             {

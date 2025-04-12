@@ -8,10 +8,32 @@ import base64
 import io
 import logging
 import json
-
+import requests
+import configparser
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models.database_models import Base, ErrorQuestion  # 导入数据库模型
+from modules.storage.database import Database
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# 读取配置文件
+config = configparser.ConfigParser()
+# 在读取配置文件部分添加 COS 配置
+#windows 路径
+config.read('F:\\work\\code\\AIcode\\book_practice\\config.ini', encoding='utf-8')
+#linux 路径
+config.read('config.ini', encoding='utf-8')
+# 从配置文件中获取API密钥
+a302_api_key = config.get('302AI', '302_api_key')
+a302_api_url = config.get('302AI', '302_api_url')
+a302_model = config.get('302AI', '302_model')
+
+# 添加代理配置读取
+enable_proxy = config.getboolean('PROXY', 'enable_proxy', fallback=False)
+http_proxy = config.get('PROXY', 'http_proxy') if enable_proxy else None
+https_proxy = config.get('PROXY', 'https_proxy') if enable_proxy else None
 
 class GiteeAIClient:
     """Gitee AI API客户端"""
@@ -184,7 +206,8 @@ class ResultFormatter:
 class ImageProcessor:
     """处理考试试卷图片，提取文本和问题"""
     
-    def __init__(self, api_key: str = "CSW0YJEY0AJVXWFSOA6CKRI6H06UAJUYK7IS1LBZ", use_mock: bool =False):
+    
+    def __init__(self, api_key: str = "CSW0YJEY0AJVXWFSOA6CKRI6H06UAJUYK7IS1LBZ", use_mock: bool = False):
         """
         初始化图像处理器
         
@@ -198,8 +221,9 @@ class ImageProcessor:
         self.color_analyzer = ColorAnalyzer()
         self.document_segmenter = DocumentSegmenter()
         self.result_formatter = ResultFormatter()
+        self.db = Database()  # 初始化数据库实例
         logger.info(f"初始化图像处理器，使用模拟数据: {use_mock}")
-        
+    
     def preprocess_image(self, image_path: str) -> Tuple[np.ndarray, np.ndarray]:
         """
         预处理图像以提高OCR和问题识别的质量
@@ -501,3 +525,247 @@ class ImageProcessor:
         
         summary = f"成功处理了 {len([r for r in results if 'error' not in r])} 个文件"
         return {"results": results, "summary": summary}
+
+    def process_images_gemini25_pro(self, image_paths: List[str], subject: str = "数学") -> Dict[str, Any]:
+        """
+        使用 Gemini-2.5-Pro 处理试卷图像
+        
+        Args:
+            image_paths: 图像文件路径列表
+            subject: 学科名称，默认为"数学"
+            
+        Returns:
+            处理结果
+        """
+        results = []
+
+        for image_path in image_paths:
+            logger.info(f"正在处理{subject}科目图像: {image_path}")
+        
+        try:
+            # 将图片转换为base64
+            base64_image = self.image_to_base64(image_path)
+            mime_type = get_mime_type(image_path)
+            image_url = f"data:{mime_type};base64,{base64_image}"
+            #logger.info(f"image_url: {image_url}")
+            #image_url = "https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E5%8E%9F%E5%A7%8B%E8%AF%95%E5%8D%B71.png"
+            proxies = {
+                'http': http_proxy,
+                'https': https_proxy
+            } if enable_proxy else None
+            # 设置是否使用流式输出
+            use_stream = False
+           # 发送请求
+            response = requests.post(
+                #url="https://openrouter.ai/api/v1/chat/completions",
+                url = a302_api_url,
+                headers={
+                    "Authorization": f"Bearer {a302_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    #"model": "google/gemini-2.5-pro-exp-03-25:free",
+                    #"model": "google/gemini-2.0-flash-exp:free",
+                    "model": a302_model,
+                    "stream": use_stream,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": """
+            # 角色定义
+            你是一位中小学错题收集与整理专家，擅长从学生的考试题目中提取错误题目，并按照题型（选择题、填空题、判断题、问答题）进行分类归纳。你会为每道错题提供正确答案，并生成一份结构化的错题本，以JSON格式呈现，便于学生复习和存入数据库。
+
+            # 任务目标
+            根据用户提供的考试题目和错误信息，完成以下任务：
+            1. **提取错误题目**：识别并提取所有答错的题目。
+            2. **分类整理**：将错误题目按照以下四类进行分类：
+            - **选择题**
+            - **填空题**
+            - **判断题**
+            - **问答题**
+            3. **JSON格式输出**：
+            - 生成一个包含所有题目的JSON对象。
+            - 即使某类题型没有错题，也保留该类型的空数组。
+            4. **符合数据库结构**：确保输出的JSON格式符合给定的数据库表结构。
+
+            # 输入格式
+            请提供以下信息：
+            - 考试题目列表（包括题干、选项（如有）、学生答案和正确答案）。
+            - 学生的错误标记（哪些题目是错误的）。
+            - 学科信息。
+            - 难度等级（1-5）。
+
+            # 输出格式
+            生成一份JSON格式的错题本，结构如下：
+
+            ```json
+            {
+            "error_questions": [
+                {
+                "question_text": "题目内容",
+                "subject": "学科名称",
+                "question_type": "题目类型",
+                "difficulty": 难度等级,
+                "answer": "正确答案",
+                "user_answer": "用户答案",
+                "explanation": "解析（如有）"
+                },
+                // ... 更多题目
+            ]
+            }
+            """
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": image_url
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                proxies=proxies,
+            )
+            # 根据模式选择处理方式
+            if use_stream:
+                full_content=process_stream_response(response)
+            else:
+                full_content=process_normal_response(response)
+                # 尝试从响应内容中提取 JSON 部分
+            try:
+                result_json = json.loads(full_content)
+                logger.info(f"result_json: {result_json}")
+                
+                # 保存json文件
+                result_path = self.result_formatter.save_json_result(
+                    result_json,
+                    f"result_{Path(image_path).stem}.json"
+                )
+                
+                # 插入数据库
+                self.db.batch_add_error_questions(result_json)
+                
+                # 添加结果
+                results.append({
+                    "image_path": image_path,
+                    "data": result_json,
+                    "result_path": result_path,
+                    "raw_response": full_content  # 保存原始响应以供调试
+                 })
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"无法解析Gemini响应为JSON格式: {str(e)}\n响应内容: {full_content[:200]}...")
+                results.append({
+                "image_path": image_path,
+                "error": "无法解析响应为JSON格式",
+                "raw_response": full_content  # 保存原始响应以供调试
+                })
+                
+        except Exception as e:
+            logger.error(f"处理图像时出错: {str(e)}")
+            results.append({
+                "image_path": image_path,
+                "error": str(e)
+            })
+    
+        # 检查results是否为空列表
+        if not results:
+            summary = "没有处理任何文件"
+        else:
+            summary = f"成功处理了 {len([r for r in results if 'error' not in r])} 个文件"
+        return {"results": results, "summary": summary}
+
+
+def process_stream_response(response):
+    """处理流式响应
+    
+    Args:
+        response: API响应对象
+        
+    Returns:
+        str: 完整的响应内容
+    """
+    full_content = ""
+    if response.status_code == 200:
+        for line in response.iter_lines():
+            if line:
+                json_str = line.decode('utf-8').replace('data: ', '')
+                try:
+                    chunk = json.loads(json_str)
+                    if 'choices' in chunk and len(chunk['choices']) > 0:
+                        content = chunk['choices'][0].get('delta', {}).get('content', '')
+                        if content:
+                            logger.info(content)
+                            full_content += content
+                except json.JSONDecodeError:
+                    continue
+        
+        # 处理完整的响应内容，提取JSON部分
+        try:
+            start_idx = full_content.find('{')
+            end_idx = full_content.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                json_content = full_content[start_idx:end_idx + 1]
+                # 尝试解析JSON
+                parsed_json = json.loads(json_content)
+                return json.dumps(parsed_json, ensure_ascii=False, indent=2)
+            else:
+                return full_content
+        except json.JSONDecodeError:
+            logger.warning(f"JSON解析失败，返回原始内容")
+            return full_content
+    else:
+        error_msg = f"请求失败: {response.status_code}"
+        logger.error(error_msg)
+        logger.error(response.text)
+        return error_msg
+
+def process_normal_response(response):
+    """处理非流式响应
+    
+    Args:
+        response: API响应对象
+        
+    Returns:
+        str: 响应内容
+    """
+    if response.status_code == 200:
+        response_json = response.json()
+        if 'choices' in response_json and len(response_json['choices']) > 0:
+            content = response_json['choices'][0].get('message', {}).get('content', '')
+            # 提取JSON内容
+            try:
+                # 查找JSON内容的开始和结束位置
+                start_idx = content.find('{')
+                end_idx = content.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    json_content = content[start_idx:end_idx + 1]
+                    # 尝试解析JSON
+                    parsed_json = json.loads(json_content)
+                    return json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                else:
+                    return content
+            except json.JSONDecodeError:
+                logger.warning(f"JSON解析失败，返回原始内容")
+                return content
+    else:
+        error_msg = f"请求失败: {response.status_code}"
+        logger.error(error_msg)
+        logger.error(response.text)
+        return error_msg
+
+def get_mime_type(file_path):
+    """根据文件扩展名获取MIME类型"""
+    extension = Path(file_path).suffix.lower()
+    mime_types = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp'
+    }
+    return mime_types.get(extension, 'image/png')

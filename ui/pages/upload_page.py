@@ -43,7 +43,7 @@ def process_images(files, subject, progress=gr.Progress()):
     # 处理图像
     try:
         # 处理图像
-        results = processor.process_images(file_paths, subject=subject)  # 传入subject参数
+        results = processor.process_images_gemini25_pro(file_paths, subject=subject)  # 传入subject参数
         
         # 更新进度
         progress(1, desc="处理完成")
@@ -72,7 +72,7 @@ def process_images(files, subject, progress=gr.Progress()):
 
 def get_example_images():
     """获取示例图片列表"""
-    resources_path = Path(__file__).parent.parent.parent / "resources"
+    resources_path = Path(__file__).parent.parent.parent / "resources/错题本原始资料20250411"
     example_images = []
     if resources_path.exists():
         for file in resources_path.glob("*.png"):

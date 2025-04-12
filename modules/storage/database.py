@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import datetime
 import logging
-
+from typing import List, Dict, Tuple, Any, Optional
 from models.database_models import Base, ErrorQuestion
 
 # 配置日志
@@ -428,5 +428,38 @@ class Database:
                 "combined_stats": [],
                 "recent_questions": []
             }
+        finally:
+            session.close()
+
+
+    def batch_add_error_questions(self, result_json: dict) -> None:
+        """批量添加错题数据
+        
+        Args:
+            result_json: 包含错题信息的字典
+        """
+        session = self.Session()
+        try:
+            # 解析结果并插入数据库
+            for question in result_json.get("error_questions", []):
+                error_question = ErrorQuestion(
+                    question_text=question.get("question_text"),
+                    subject=question.get("subject"),
+                    question_type=question.get("question_type"),
+                    difficulty=question.get("difficulty"),
+                    answer=question.get("answer"),
+                    user_answer=question.get("user_answer"),
+                    explanation=question.get("explanation")
+                )
+                session.add(error_question)
+            
+            # 提交事务
+            session.commit()
+            logger.info("成功批量添加错题数据到数据库")
+            
+        except Exception as e:
+            session.rollback()
+            logger.error(f"批量添加错题失败: {str(e)}")
+            raise e
         finally:
             session.close()
