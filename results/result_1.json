@@ -1,61 +1,67 @@
 {
-  "sheets": [
+  "error_questions": [
     {
-      "section_number": "1",
-      "section_title": "",
-      "table_data": {
-        "headers": [
-          "节目",
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "rows": [
-          [
-            "演员人数",
-            10,
-            2,
-            10,
-            1
-          ],
-          [
-            "彩排时長",
-            30,
-            10,
-            20,
-            10
-          ]
-        ]
-      },
-      "question_text": [
-        {
-          "_id_": "_q_1",
-          "_text_": [
-            {
-              "type": "printed_text",
-              "_content_": "已知每位演员只参演一個节目。一位演员的彩排时间是从第一个彩排的节目彩排开始到位"
-            },
-            {
-              "type": "handwriten",
-              "color": "red",
-              "content": "演員的節目的彩排開始的时间间隔（不含換場時間等其他因素）. 若節目的順後順先後顺序排列，則節目的D的演員的候場時間為"
-            },
-            {
-              "type": "handwriten",
-              "color": "red",
-              "content": ""
-            },
-            {
-              "type": "handwriten",
-              "color": "blue",
-              "content": ""
-            }
-          ],
-          "answer": "60分钟",
-          "explanation": "假设节目按照A、B、C、D的顺序排列，节目D的候场时间是从第一个节目开始到D开始的时间间隔。因此，D的候场时间等于前三个节目彩排时间的总和：A的30分钟 + B的10分钟 + C的20分钟 = 60分钟。"
-        }
-      ]
+      "question_text": "若使这23位演员的候场时间之和最小,则节目应按D-B-CA的先后顺序彩排。",
+      "subject": "数学",
+      "question_type": "判断题",
+      "difficulty": 3,
+      "answer": "正确",
+      "user_answer": "错误",
+      "explanation": "根据题意，应按照D-B-C-A的顺序排列，D的候场时间最短。"
+    },
+    {
+      "question_text": "根据记录的数据，该厂生产风筝最多的一天是星期四",
+      "subject": "数学",
+      "question_type": "判断题",
+      "difficulty": 2,
+      "answer": "正确",
+      "user_answer": "错误",
+      "explanation": "观察增减数值，星期四增产最多。"
+    },
+    {
+      "question_text": "产量最多的一天比产量最少的一天多生产多少只风筝？113|+|-6|=19(只)",
+      "subject": "数学",
+      "question_type": "判断题",
+      "difficulty": 2,
+      "answer": "正确",
+      "user_answer": "错误",
+      "explanation": "通过计算，可以得到答案."
+    },
+    {
+      "question_text": "该厂实行每周计件工资制，每生产一只风筝可得20元，若超额完成任务，则超过部分每只另奖5元；少生产一只扣4元，那么该厂工人这一周的工资总额是多少元？ A25×5+25×(5+13+6)=600(元)-4×(2+4+6+3)=-60元)100+19=709(9%) 14300 709×20+600-60-14720元 总额14720元",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "14720元",
+      "user_answer": "错误",
+      "explanation": "根据题意，进行计算可得答案"
+    },
+    {
+      "question_text": "若x-2=5,求x的值是多少？-3成7",
+      "subject": "数学",
+      "question_type": "判断题",
+      "difficulty": 2,
+      "answer": "正确",
+      "user_answer": "错误",
+      "explanation": "解方程即可得到答案."
+    },
+    {
+      "question_text": "在“-”“×”两个符号中选一个自己想要的符号，填入2²+2×(10)中的口，并计算。2²+2×(1-2)解:=4+2×121 =4+1 지",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "5",
+      "user_answer": "错误",
+      "explanation": "计算结果，选择合适的符号。"
+    },
+    {
+      "question_text": "解出所有符合条件的整数x，使得x4+x+2=6,写出求解的过程：-4、3、2、1.0-1-2",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "x = -4, -3, -2, -1, 0, 1, 2",
+      "user_answer": "错误",
+      "explanation": "通过分析绝对值关系，可得结论。"
     }
   ]
 }
