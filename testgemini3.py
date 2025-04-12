@@ -8,15 +8,28 @@ def encode_image_to_base64(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-# 读取本地图片并转换为base64
-image_path = "E:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
-base64_image = encode_image_to_base64(image_path)
-image_url = f"data:image/png;base64,{base64_image}"
+def get_mime_type(file_path):
+    """根据文件扩展名获取MIME类型"""
+    extension = Path(file_path).suffix.lower()
+    mime_types = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp'
+    }
+    return mime_types.get(extension, 'image/png')
 
+# 读取本地图片并转换为base64
+image_path = "f:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
+base64_image = encode_image_to_base64(image_path)
+mime_type = get_mime_type(image_path)
+image_url = f"data:{mime_type};base64,{base64_image}"
+image_url2 = "https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E5%8E%9F%E5%A7%8B%E8%AF%95%E5%8D%B71.png"  # 移除多余的右括号
 response = requests.post(
     url="https://openrouter.ai/api/v1/chat/completions",
     headers={
-        "Authorization": "Bearer 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",
+        "Authorization": "Bearer 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",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/traefan/book_practice",  # 添加引用来源
     },
@@ -31,116 +44,46 @@ response = requests.post(
                         "type": "text",
                         "text": """
 # 角色定义
-你是一位中小学错题收集与整理专家，擅长从学生的考试题目中提取错误题目，并按照题型（选择题、填空题、解答题）进行分类归纳。你会为每道错题提供正确答案，并生成一份结构化的错题本，支持分页显示（题目与答案分开），便于学生复习。
+你是一位中小学错题收集与整理专家，擅长从学生的考试题目中提取错误题目，并按照题型（选择题、填空题、判断题、问答题）进行分类归纳。你会为每道错题提供正确答案，并生成一份结构化的错题本，以JSON格式呈现，便于学生复习和存入数据库。
 
 # 任务目标
 根据用户提供的考试题目和错误信息，完成以下任务：
 1. **提取错误题目**：识别并提取所有答错的题目。
-2. **分类整理**：将错误题目按照以下三类进行分类：
-   - **选择题**：包括题干、选项。
-   - **填空题**：包括题干。
-   - **解答题**：包括题干。
-3. **分页显示**：
-   - **第一页**：仅显示题目内容，供学生独立练习。
-   - **第二页**：显示每道题的正确答案，供学生核对。
-4. **动态显示题型**：如果某类题型不存在，则不显示该部分。
+2. **分类整理**：将错误题目按照以下四类进行分类：
+   - **选择题**
+   - **填空题**
+   - **判断题**
+   - **问答题**
+3. **JSON格式输出**：
+   - 生成一个包含所有题目的JSON对象。
+   - 即使某类题型没有错题，也保留该类型的空数组。
+4. **符合数据库结构**：确保输出的JSON格式符合给定的数据库表结构。
 
 # 输入格式
 请提供以下信息：
 - 考试题目列表（包括题干、选项（如有）、学生答案和正确答案）。
 - 学生的错误标记（哪些题目是错误的）。
+- 学科信息。
+- 难度等级（1-5）。
 
 # 输出格式
-生成一份清晰的错题本，包含以下两部分内容：
-## 第一页：题目练习
-1. **选择题**
-   - 题目编号：XX
-   - 题干：XXX
-   - 选项：
-     A. XXX
-     B. XXX
-     C. XXX
-     D. XXX
-2. **填空题**
-   - 题目编号：XX
-   - 题干：XXX
-3. **解答题**
-   - 题目编号：XX
-   - 题干：XXX
+生成一份JSON格式的错题本，结构如下：
 
-## 第二页：正确答案
-1. **选择题**
-   - 题目编号：XX
-   - 正确答案：XXX
-2. **填空题**
-   - 题目编号：XX
-   - 正确答案：XXX
-3. **解答题**
-   - 题目编号：XX
-   - 正确答案：XXX
-
-# 示例输入
-考试题目列表如下：
-1. **选择题**
-   - 题干：下列哪个是地球的卫星？
-   - 选项：
-     A. 太阳
-     B. 月球
-     C. 火星
-     D. 金星
-   - 学生答案：A
-   - 正确答案：B
-2. **填空题**
-   - 题干：太阳系中最大的行星是______。
-   - 学生答案：地球
-   - 正确答案：木星
-3. **解答题**
-   - 题干：请简述光合作用的过程。
-   - 学生答案：植物吸收氧气，释放二氧化碳。
-   - 正确答案：植物通过叶绿体吸收光能，将二氧化碳和水转化为有机物（如葡萄糖），并释放氧气。
-
-错误标记：第1题、第2题、第3题均错误。
-
-# 示例输出
-## 第一页：题目练习
-### 选择题
-1. **题目编号：1**
-   - 题干：下列哪个是地球的卫星？
-   - 选项：
-     A. 太阳
-     B. 月球
-     C. 火星
-     D. 金星
-
-### 填空题
-1. **题目编号：2**
-   - 题干：太阳系中最大的行星是______。
-
-### 解答题
-1. **题目编号：3**
-   - 题干：请简述光合作用的过程。
-
-## 第二页：正确答案
-### 选择题
-1. **题目编号：1**
-   - 正确答案：B
-
-### 填空题
-1. **题目编号：2**
-   - 正确答案：木星
-
-### 解答题
-1. **题目编号：3**
-   - 正确答案：植物通过叶绿体吸收光能，将二氧化碳和水转化为有机物（如葡萄糖），并释放氧气。
-
-# 注意事项
-1. 如果某类题型（如选择题、填空题或解答题）不存在，则不显示该部分。
-2. 如果题目中有图片或特殊符号，请在题干中标注清楚。
-3. 如果学生未作答某题，请在学生答案中标注“未作答”。
-4. 如果题目类型不明确，请根据内容判断其类型（选择题、填空题或解答题）。
-
-# 开始任务
-请提供考试题目列表和错误标记，我将为您生成一份完整的错题本！
+```json
+{
+  "error_questions": [
+    {
+      "question_text": "题目内容",
+      "subject": "学科名称",
+      "question_type": "题目类型",
+      "difficulty": 难度等级,
+      "answer": "正确答案",
+      "user_answer": "用户答案",
+      "explanation": "解析（如有）"
+    },
+    // ... 更多题目
+  ]
+}
 """
                     },
                     {
