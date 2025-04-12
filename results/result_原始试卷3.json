@@ -1,0 +1,22 @@
+{
+  "error_questions": [
+    {
+      "question_text": "8. *若ェー2+1，y=3+4",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "y=x^2-2x+4",
+      "user_answer": "y=(x-1)^2+3",
+      "explanation": "展开化简"
+    },
+    {
+      "question_text": "(3)已知a²=2,b³=3,比较a,b的大小，(a,b均为大于1的数)",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "a<b",
+      "user_answer": "a>b",
+      "explanation": "a^6 = 8, b^6 = 9"
+    }
+  ]
+}

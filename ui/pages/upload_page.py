@@ -122,12 +122,12 @@ def create_upload_page():
                 # 添加双击事件处理
                 def gallery_select(evt: gr.SelectData):
                     selected_path = get_example_images()[evt.index]
-                    return selected_path  # 直接返回文件路径字符串
+                    return [selected_path, selected_path]  # 返回文件路径给file_input和preview
 
                 example_gallery.select(
                     fn=gallery_select,
                     inputs=[],
-                    outputs=[file_input]
+                    outputs=[file_input, preview]  # 添加preview作为输出
                 )
             # 手动录入标签页
             with gr.TabItem("手动录入"):
