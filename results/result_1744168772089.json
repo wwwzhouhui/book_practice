@@ -1,0 +1,55 @@
+{
+  "sections": [
+    {
+      "section_number": "1",
+      "section_title": "选择题",
+      "questions": [
+        {
+          "question_number": "1",
+          "question_text": "在三角形ABC中，如果sinA:sinB:sinC=1:2:3，则该三角形的三个内角A、B、C的大小关系是？",
+          "printed_text": "A. A<B<C  B. A>B>C  C. B<A<C  D. C<A<B",
+          "handwritten_notes": [
+            {
+              "text": "选A",
+              "color": "blue"
+            }
+          ],
+          "answer": "A. A<B<C",
+          "explanation": "在三角形中，正弦值的比例与对应角度成正比。所以sinA:sinB:sinC=1:2:3意味着A<B<C。"
+        },
+        {
+          "question_number": "2",
+          "question_text": "已知某几何体的三视图如图所示，则该几何体的体积是？",
+          "printed_text": "A. 12  B. 18  C. 24  D. 36",
+          "handwritten_notes": [
+            {
+              "text": "选C",
+              "color": "red"
+            }
+          ],
+          "answer": "C. 24",
+          "explanation": "根据三视图分析，该几何体的体积为3×4×2=24立方单位。"
+        }
+      ]
+    },
+    {
+      "section_number": "2",
+      "section_title": "填空题",
+      "questions": [
+        {
+          "question_number": "3",
+          "question_text": "已知函数f(x)=2x^3-ax^2+x+1在x=1处取得极值，则a=________。",
+          "printed_text": "",
+          "handwritten_notes": [
+            {
+              "text": "a=6",
+              "color": "blue"
+            }
+          ],
+          "answer": "a=6",
+          "explanation": "对f(x)=2x^3-ax^2+x+1求导，得f'(x)=6x^2-2ax+1。在x=1处取极值，则f'(1)=0，即6-2a+1=0，解得a=7/2。"
+        }
+      ]
+    }
+  ]
+}
