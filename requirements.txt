@@ -2,10 +2,10 @@
 gradio==5.23.3
 
 # 数据库
-SQLAlchemy==2.0.40
+SQLAlchemy==2.0.40pi
 
 # 图像处理
-Pillow==11.2.0
+Pillow==11.2.1
 opencv-python==4.11.0.86
 
 # 文件处理
