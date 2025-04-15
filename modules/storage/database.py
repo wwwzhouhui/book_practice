@@ -239,14 +239,14 @@ class Database:
         
         Args:
             question_id: 错题ID
-            
+        
         Returns:
             是否删除成功
         """
         if question_id is None:
             logger.warning("删除错题时ID为None")
             return False
-            
+        
         session = self.Session()
         try:
             # 确保ID是整数
@@ -257,12 +257,6 @@ class Database:
                     logger.error(f"无效的错题ID格式: {question_id}")
                     return False
             
-            # 先查询是否存在
-            question = session.query(ErrorQuestion).filter_by(id=question_id).first()
-            if not question:
-                logger.warning(f"要删除的错题不存在: ID={question_id}")
-                return False
-                
             # 执行删除
             result = session.query(ErrorQuestion).filter_by(id=question_id).delete()
             session.commit()
@@ -271,8 +265,9 @@ class Database:
                 logger.info(f"删除错题成功: ID={question_id}")
                 return True
             else:
-                logger.warning(f"删除错题失败: ID={question_id}")
+                logger.warning(f"删除错题失败: ID={question_id} 不存在")
                 return False
+            
         except Exception as e:
             session.rollback()
             logger.error(f"删除错题异常: ID={question_id}, 错误={str(e)}")
