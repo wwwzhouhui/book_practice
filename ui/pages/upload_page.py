@@ -247,7 +247,7 @@ def create_upload_page():
                                 step=1,
                                 label="生成数量"
                             )
-                            gen_sample_btn = gr.Button("生成示例错题", variant="primary")
+                            gen_sample_btn = gr.Button("生成示例错题", variant="primary", interactive=False)
 
                         gen_result = gr.Markdown()
 

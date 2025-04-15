@@ -40,7 +40,7 @@ class Database:
         logger.info(f"数据库初始化完成: {db_path}")
         
         # 检查错题数量，如果为空则自动生成示例数据
-        self.initialize_sample_data_if_empty()
+        #self.initialize_sample_data_if_empty()
     
     def initialize_sample_data_if_empty(self, min_count=5):
         """如果数据库为空，则初始化示例数据

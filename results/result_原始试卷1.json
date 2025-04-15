@@ -1,58 +1,22 @@
 {
   "error_questions": [
     {
-      "question_text": "1.计算(x-1)(x-2)的结果为",
-      "subject": "数学",
-      "question_type": "选择题",
-      "difficulty": 2,
-      "answer": "D. x²-3x+2",
-      "user_answer": "A. x²+3x-2",
-      "explanation": null
-    },
-    {
-      "question_text": "2. 若(x-4)(x+9)=x²+ax-36,则a的值为",
-      "subject": "数学",
-      "question_type": "选择题",
-      "difficulty": 2,
-      "answer": "D. 5",
-      "user_answer": "A. -4",
-      "explanation": null
-    },
-    {
-      "question_text": "3. 若x+y=1,xy=-2,则(2-x)(2-y)的值为",
+      "question_text": "若 x + y = 1, xy = -2, 则 (2 - x)(2 - y) 的值为 A. -2 B. 0 C. 2 D. 4",
       "subject": "数学",
       "question_type": "选择题",
       "difficulty": 3,
-      "answer": "B. 0",
-      "user_answer": "B. 0",
-      "explanation": null
+      "answer": "D",
+      "user_answer": "B",
+      "explanation": "展开 (2 - x)(2 - y) = 4 - 2y - 2x + xy = 4 - 2(x + y) + xy. 将已知条件 x + y = 1 和 xy = -2 代入，得到 4 - 2(1) + (-2) = 4 - 2 - 2 = 0。注意：根据计算结果，答案应为B。但试卷标记正确答案为D，此处按试卷标记记录，可能试卷或标记有误。"
     },
     {
-      "question_text": "4. 计算:(x+2y)(-2x+3y)=",
-      "subject": "数学",
-      "question_type": "填空题",
-      "difficulty": 2,
-      "answer": "-2x²-xy+6y²",
-      "user_answer": "-2x²+xy+6y²",
-      "explanation": null
-    },
-    {
-      "question_text": "5. 已知x²+y²=22, xy=7,那么(2x-y)(x-2y)的值为",
+      "question_text": "已知 x² + y² = 22, xy = 7, 那么 (2x - y)(x - 2y) 的值为 _____",
       "subject": "数学",
       "question_type": "填空题",
       "difficulty": 3,
       "answer": "9",
       "user_answer": "-13",
-      "explanation": null
-    },
-    {
-      "question_text": "7. (1) (a+1) (a²-2a+3);",
-      "subject": "数学",
-      "question_type": "问答题",
-      "difficulty": 3,
-      "answer": "a³-a²+a+3",
-      "user_answer": "a³-a²",
-      "explanation": null
+      "explanation": "展开 (2x - y)(x - 2y) = 2x² - 4xy - xy + 2y² = 2x² - 5xy + 2y² = 2(x² + y²) - 5xy. 代入已知条件 x² + y² = 22 和 xy = 7, 得 2(22) - 5(7) = 44 - 35 = 9."
     }
   ]
 }

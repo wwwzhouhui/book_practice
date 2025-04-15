@@ -1,0 +1,40 @@
+{
+  "error_questions": [
+    {
+      "question_text": "若 4a² - 2ka + 9 是一个用完全平方公式得到的结果，则 k 的值为",
+      "subject": "数学",
+      "question_type": "填空题",
+      "difficulty": 3,
+      "answer": "±6",
+      "user_answer": "6",
+      "explanation": "根据完全平方公式 (m ± n)² = m² ± 2mn + n²。题目中 4a² = (2a)²，9 = 3²。所以 4a² - 2ka + 9 应为 (2a ± 3)² 的展开形式。展开 (2a + 3)² = 4a² + 12a + 9，对比得 -2k = 12，k = -6。展开 (2a - 3)² = 4a² - 12a + 9，对比得 -2k = -12，k = 6。因此，k 的值为 ±6。"
+    },
+    {
+      "question_text": "若 (ax + 3y)² = 4x² + 12xy + by²，则 a, b 的值依次为",
+      "subject": "数学",
+      "question_type": "填空题",
+      "difficulty": 3,
+      "answer": "2, 9",
+      "user_answer": "2, -9",
+      "explanation": "展开左边：(ax + 3y)² = (ax)² + 2(ax)(3y) + (3y)² = a²x² + 6axy + 9y²。对比右边 4x² + 12xy + by²，对应系数可得：a² = 4，6a = 12，b = 9。由 6a = 12 解得 a = 2。验证 a² = 2² = 4，符合。因此 a = 2, b = 9。"
+    },
+    {
+      "question_text": "已知 a² - 3a - 2 = 0, 那么代数式 (a - 2)² + 2(a + 1) 的值为",
+      "subject": "数学",
+      "question_type": "填空题",
+      "difficulty": 4,
+      "answer": "a + 8 (注：根据已知条件无法化简为常数，题目可能存在问题。若题目为a²-3a+2=0,则a=1或2,值为5或6)",
+      "user_answer": "9",
+      "explanation": "先化简代数式：(a - 2)² + 2(a + 1) = (a² - 4a + 4) + (2a + 2) = a² - 2a + 6。由已知条件 a² - 3a - 2 = 0，可得 a² - 3a = 2。将目标式变形：a² - 2a + 6 = (a² - 3a) + a + 6 = 2 + a + 6 = a + 8。结果与a有关，无法得到唯一数值。请检查原题是否有误。"
+    },
+    {
+      "question_text": "利用乘法公式计算: (x + y)²(x - y)²",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "x⁴ - 2x²y² + y⁴",
+      "user_answer": "2x² + 2y² (原解答过程有误)",
+      "explanation": "方法一：先用积的乘方公式，再用平方差公式，最后用完全平方公式。\n(x + y)²(x - y)² = [(x + y)(x - y)]² = [x² - y²]² = (x²)² - 2(x²)(y²) + (y²)² = x⁴ - 2x²y² + y⁴。\n方法二：先展开各自的完全平方，再相乘（较复杂）。\n(x² + 2xy + y²)(x² - 2xy + y²) = ... = x⁴ - 2x²y² + y⁴。学生在计算过程中直接将两式相加，是错误的。"
+    }
+  ]
+}

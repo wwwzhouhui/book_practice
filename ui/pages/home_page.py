@@ -21,7 +21,7 @@ def get_statistics(db: Database):
             # 如果没有数据，尝试生成示例数据
             logger.warning("数据库中未检测到数据，尝试生成示例数据。")
             try:
-                db.generate_sample_data(count=18)  # 每个学科每个难度至少一个
+                #db.generate_sample_data(count=18)  # 每个学科每个难度至少一个
                 stats = db.get_statistics()  # 重新获取统计数据
                 initial_msg = "⚠️ 未检测到数据，已自动生成示例数据用于展示。"
                 logger.info("示例数据生成成功。")

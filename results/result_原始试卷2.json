@@ -1,0 +1,13 @@
+{
+  "error_questions": [
+    {
+      "question_text": "先化简, 再求值: a³ ⋅ (-b³)² + (-1/2 ab²)³, 其中 a=-2, b=1.",
+      "subject": "数学",
+      "question_type": "问答题",
+      "difficulty": 3,
+      "answer": "化简结果: 7/8 a³b⁶, 最终结果: -7",
+      "user_answer": "化简结果: -1/8 a³b⁶, 最终结果: 1",
+      "explanation": "错误在于化简步骤，合并同类项时出错：a³b⁶ + (-1/8 a³b⁶) 应为 (1 - 1/8)a³b⁶ = 7/8 a³b⁶，学生误算为 -1/8 a³b⁶。"
+    }
+  ]
+}
