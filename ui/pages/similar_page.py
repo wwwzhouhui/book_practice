@@ -39,15 +39,19 @@ def create_similar_page():
                 search_btn = gr.Button("查询错题")
             
             with gr.Column(scale=2):
-                # 错题列表
+                # 根据官方文档修改表格配置
                 question_table = gr.Dataframe(
                     headers=["题目ID", "题目内容", "学科", "题型", "难度", "创建时间"],
-                    interactive=True,
-                    label="错题列表"
+                    datatype=["number", "str", "str", "str", "str", "str"],
+                    interactive=False,  # 设置为False，因为我们只需要选择功能
+                    label="错题列表",
+                    value=None,  # 初始值为空
+                    wrap=True,
+                    row_count=10
                 )
                 
                 with gr.Row():
-                    selected_count = gr.Text(label="已选择题目数", value="0", interactive=False)
+                    selected_count = gr.Text(label="已选题目ID", value="", interactive=False)
                     gen_count = gr.Slider(
                         minimum=1,
                         maximum=5,
@@ -55,18 +59,22 @@ def create_similar_page():
                         step=1,
                         label="生成数量"
                     )
-                    generate_btn = gr.Button("生成同类题", interactive=False)
-                
+                    generate_btn = gr.Button("生成同类题",interactive=False)
+
                 # 生成结果
+                with gr.Row():
+                    # 添加生成结果表格
+                    generated_table = gr.Dataframe(
+                        headers=["题目内容", "答案", "解析"],
+                        label="生成结果",
+                        wrap=True,
+                        row_count=5,
+                        interactive=False
+                    )
+                    
                 with gr.Row():
                     result_status = gr.Text(label="生成状态", interactive=False)
                     save_btn = gr.Button("保存生成结果", interactive=False)
-                
-                result_table = gr.Dataframe(
-                    headers=["题目内容", "答案", "解析"],
-                    label="生成结果",
-                    visible=False
-                )
 
         # 定义事件处理函数
         def search_questions(subject, question_type, date_range):
@@ -101,18 +109,38 @@ def create_similar_page():
                 logger.error(f"查询错题失败: {str(e)}")
                 return gr.update(value=pd.DataFrame()), f"查询失败: {str(e)}"
 
-        def update_selection(evt: gr.SelectData):
-            """更新选择状态"""
-            return str(len(evt.index))
+        def on_select(evt: gr.SelectData, df):
+            """处理表格选择事件"""
+            try:
+                # 获取选中的行索引
+                if isinstance(evt.index, tuple) or isinstance(evt.index, list):
+                    # 如果是元组或列表格式 [row, col]，只取行号
+                    selected_indices = evt.index[0]
+                else:
+                    # 如果是单个整数
+                    selected_indices = evt.index
+                
+                # 如果df为空，直接返回
+                if df is None or len(df) == 0:
+                    return "", False
+                    
+                # 获取选中行的题目ID
+                selected_id = str(df.iloc[selected_indices]["题目ID"])
+                
+                logger.info(f"选中了行，题目ID: {selected_id}")
+                
+                # 返回选中的ID字符串和生成按钮状态
+                return selected_id, gr.update(interactive=True)
+                
+            except Exception as e:
+                logger.error(f"处理选择事件失败: {str(e)}")
+                return "", False
 
-        def generate_similar_questions(selected_rows, gen_count):
+        def generate_similar_questions(selected_count, gen_count):
             """生成同类题"""
             try:
-                if not selected_rows or len(selected_rows) == 0:
-                    return "请先选择错题", gr.update(visible=False), gr.update(interactive=False)
-                
                 # 获取选中的错题
-                question_ids = [row["题目ID"] for row in selected_rows]
+                question_ids = selected_count
                 source_questions = [db.get_error_question(qid) for qid in question_ids]
                 
                 # 生成同类题
@@ -122,7 +150,7 @@ def create_similar_page():
                 )
                 
                 if not generated:
-                    return "生成失败", gr.update(visible=False), gr.update(interactive=False)
+                    return "生成失败", gr.update(value=None), gr.update(interactive=False)
                 
                 # 转换为DataFrame
                 df = pd.DataFrame({
@@ -131,27 +159,47 @@ def create_similar_page():
                     "解析": [q["explanation"] for q in generated]
                 })
                 
-                return "生成成功", gr.update(value=df, visible=True), gr.update(interactive=True)
+                return "生成成功", gr.update(value=df), gr.update(interactive=True)
                 
             except Exception as e:
                 logger.error(f"生成同类题失败: {str(e)}")
-                return f"生成失败: {str(e)}", gr.update(visible=False), gr.update(interactive=False)
+                return f"生成失败: {str(e)}", gr.update(value=None), gr.update(interactive=False)
 
-        def save_generated_questions(result_df):
+        def save_generated_questions(result_df, selected_count):
             """保存生成的题目"""
             try:
                 if result_df is None or len(result_df) == 0:
                     return "没有可保存的题目"
                 
+                # 获取源题目信息
+                source_id = selected_count[0] if selected_count else None
+                if not source_id:
+                    return "未找到源题目ID"
+                
+                source_question = db.get_error_question(source_id)
+                if not source_question:
+                    return "未找到源题目信息"
+                
+                success_count = 0
                 # 保存到数据库
                 for _, row in result_df.iterrows():
-                    db.save_similar_question({
+                    question_data = {
                         "question_text": row["题目内容"],
                         "answer": row["答案"],
-                        "explanation": row["解析"]
-                    })
+                        "explanation": row["解析"],
+                        "subject": source_question["subject"],  # 从源题目获取学科
+                        "question_type": source_question["question_type"],  # 从源题目获取题型
+                        "difficulty": source_question["difficulty"],  # 从源题目获取难度
+                        "source_question_id": source_id  # 设置源题目ID
+                    }
+                    
+                    try:
+                        db.save_similar_question(question_data)
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"保存单个题目失败: {str(e)}")
                 
-                return f"成功保存 {len(result_df)} 道题目"
+                return f"成功保存 {success_count} 道题目"
                 
             except Exception as e:
                 logger.error(f"保存生成题目失败: {str(e)}")
@@ -165,23 +213,49 @@ def create_similar_page():
         )
         
         question_table.select(
-            update_selection,
-            outputs=[selected_count]
+            fn=on_select,
+            inputs=[question_table],
+            outputs=[selected_count, generate_btn]  # 保持不变，但现在会根据 selected_count 是否有值来激活按钮
         )
-        
+
         generate_btn.click(
             generate_similar_questions,
-            inputs=[question_table, gen_count],
-            outputs=[result_status, result_table, save_btn]
+            inputs=[selected_count, gen_count],
+            outputs=[result_status, generated_table, save_btn]
         )
         
         save_btn.click(
             save_generated_questions,
-            inputs=[result_table],
+            inputs=[generated_table, selected_count],  # 添加 selected_count 作为输入
             outputs=[result_status]
         )
 
     return "生成同类题"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
