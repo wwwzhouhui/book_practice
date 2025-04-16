@@ -6,7 +6,7 @@ import os
 import datetime
 import logging
 from typing import List, Dict, Tuple, Any, Optional
-from models.database_models import Base, ErrorQuestion
+from models.database_models import Base, ErrorQuestion, SimilarQuestion
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -287,7 +287,7 @@ class Database:
         import random
         
         subjects = ["数学", "物理", "化学"]
-        question_types = ["选择题", "填空题", "计算题", "解答题"]
+        question_types = ["选择题", "填空题", "判断题", "问答题"]
         
         session = self.Session()
         question_ids = []
@@ -303,12 +303,7 @@ class Database:
                     
                     # 根据学科和题型生成不同的题目
                     if subject == "数学":
-                        if question_type == "计算题":
-                            a, b = random.randint(10, 100), random.randint(10, 100)
-                            question_text = f"计算: {a} + {b} = ?"
-                            answer = str(a + b)
-                            explanation = f"将{a}与{b}相加得到{a+b}"
-                        elif question_type == "解答题":
+                        if question_type == "问答题":
                             question_text = "证明：三角形内角和等于180度。"
                             answer = "证明过程略"
                             explanation = "可以通过内错角相等和同位角相等证明"
@@ -559,5 +554,61 @@ class Database:
             session.rollback()
             logger.error(f"批量添加错题失败: {str(e)}")
             raise e
+        finally:
+            session.close()
+
+    def save_similar_question(self, question_data: Dict[str, Any]) -> int:
+        """保存生成的同类题
+        
+        Args:
+            question_data: 题目数据
+        
+        Returns:
+            新题目ID
+        """
+        session = self.Session()
+        try:
+            similar_question = SimilarQuestion(
+                question_text=question_data["question_text"],
+                subject=question_data["subject"],
+                question_type=question_data["question_type"],
+                difficulty=question_data["difficulty"],
+                answer=question_data["answer"],
+                explanation=question_data["explanation"],
+                source_question_id=question_data["source_question_id"]
+            )
+            
+            session.add(similar_question)
+            session.commit()
+            
+            return similar_question.id
+            
+        except Exception as e:
+            session.rollback()
+            logger.error(f"保存同类题失败: {str(e)}")
+            raise e
+        finally:
+            session.close()
+
+    def get_similar_questions(self, source_id: int) -> List[Dict[str, Any]]:
+        """获取某道题的同类题列表
+        
+        Args:
+            source_id: 原始题目ID
+        
+        Returns:
+            同类题列表
+        """
+        session = self.Session()
+        try:
+            questions = session.query(SimilarQuestion)\
+                .filter_by(source_question_id=source_id)\
+                .all()
+            
+            return [q.to_dict() for q in questions]
+            
+        except Exception as e:
+            logger.error(f"获取同类题失败: {str(e)}")
+            return []
         finally:
             session.close()

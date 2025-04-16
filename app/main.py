@@ -17,6 +17,7 @@ try:
     from ui.pages.home_page import create_home_page
     from ui.pages.upload_page import create_upload_page
     from ui.pages.search_page import create_search_page
+    from ui.pages.similar_page import create_similar_page
     logger.info("页面创建函数导入成功。")
 except ImportError as e:
     logger.error(f"导入页面模块失败: {e}。请确保 'ui/pages' 目录在 Python 路径中，并且文件存在。", exc_info=True)
@@ -70,7 +71,6 @@ def create_app():
                     # 如果创建失败，放置一个错误消息
                     gr.Markdown(f"❌ 加载首页组件时出错: {e}")
 
-
             with gr.TabItem("作业上传"):
                 logger.info("创建作业上传 Tab...")
                 try:
@@ -80,7 +80,6 @@ def create_app():
                     logger.error(f"创建作业上传页面时出错: {e}", exc_info=True)
                     gr.Markdown(f"❌ 加载作业上传页面时出错: {e}")
 
-
             with gr.TabItem("错题查询"):
                 logger.info("创建错题查询 Tab...")
                 try:
@@ -89,6 +88,16 @@ def create_app():
                 except Exception as e:
                     logger.error(f"创建错题查询页面时出错: {e}", exc_info=True)
                     gr.Markdown(f"❌ 加载错题查询页面时出错: {e}")
+
+            # 添加同类题生成页面
+            with gr.TabItem("同类题生成"):
+                logger.info("创建同类题生成 Tab...")
+                try:
+                    create_similar_page()
+                    logger.info("同类题生成页面创建成功。")
+                except Exception as e:
+                    logger.error(f"创建同类题生成页面时出错: {e}", exc_info=True)
+                    gr.Markdown(f"❌ 加载同类题生成页面时出错: {e}")
 
         # --- 自动刷新首页数据 ---
         # 确保所有必要的组件和函数都已成功从 create_home_page 获取

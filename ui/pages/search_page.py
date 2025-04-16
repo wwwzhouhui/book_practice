@@ -135,7 +135,7 @@ def create_search_page():
 
                             with gr.Column(scale=1):
                                 question_type_edit = gr.Dropdown(
-                                    choices=["选择题", "填空题", "计算题", "解答题", "其他"],
+                                    choices=["选择题", "填空题", "判断题", "问答题"],
                                     label="题型"
                                 )
                                 # 创建时间不可编辑

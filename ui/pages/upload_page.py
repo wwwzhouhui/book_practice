@@ -193,7 +193,7 @@ def create_upload_page():
                             value="数学"
                         )
                         question_type = gr.Dropdown(
-                            choices=["选择题", "填空题", "计算题", "解答题"],
+                            choices=["选择题", "填空题", "判断题", "问答题"],
                             label="题型",
                             value="选择题"
                         )
