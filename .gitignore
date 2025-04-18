@@ -9,3 +9,4 @@ __pycache__/*
 *.db
 *.json
 data/homework.db
+results/*.json

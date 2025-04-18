@@ -121,29 +121,31 @@ def create_upload_page():
                     value="数学"
                 )
 
-                # 添加示例图片展示区域
-                example_gallery = gr.Gallery(
-                    label="题库案例（双击选择）",
-                    value=get_example_images(),
-                    columns=4,
-                    height=200,
-                    show_label=True,
-                    elem_id="example_gallery"
-                )
-
-                # 上传作业部分
-                with gr.Row():
+                with gr.Row(equal_height=True):
                     with gr.Column(scale=2):
+                        # 上传作业部分
                         file_input = gr.File(
                             label="上传作业图片",
                             file_types=["image"],
                             file_count="multiple" # 允许多文件
                         )
                         upload_button = gr.Button("开始处理", variant="primary")
+                        
+                        # 处理状态
+                        status = gr.Textbox(label="处理状态", lines=8)
+
+                        # 添加示例图片展示区域
+                        example_gallery = gr.Gallery(
+                            label="题库案例（双击选择）",
+                            value=get_example_images(),
+                            columns=4,
+                            height=200,
+                            show_label=True,
+                            elem_id="example_gallery"
+                        )
 
                     with gr.Column(scale=3):
                         preview = gr.Image(label="预览", show_label=True)
-                        status = gr.Textbox(label="处理状态", lines=8)
 
                 # 添加双击事件处理
                 def gallery_select(evt: gr.SelectData):
