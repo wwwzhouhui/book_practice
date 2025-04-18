@@ -120,8 +120,8 @@ def create_home_page():
             - 生成个性化的练习题
             """)
 
-        # 系统状态卡片
-        with gr.Row():
+        # 系统状态卡片和数据预览
+        with gr.Row(equal_height=True):
             with gr.Column(variant="panel", scale=1):
                 gr.Markdown("### 系统状态")
                 # 设置初始值为"加载中..."或默认值，将由 app.load 更新
@@ -134,68 +134,66 @@ def create_home_page():
                 processed_count = gr.Label(value="-", label="已处理作业数", elem_id="processed_count")
                 question_count = gr.Label(value="-", label="错题总数", elem_id="question_count")
 
-        # 错题统计部分
-        with gr.Accordion("错题数据统计", open=True):
-            refresh_btn = gr.Button("刷新统计数据", variant="primary")
+            # 错题数据统计部分
+            with gr.Column(variant="panel", scale=2):
+                gr.Markdown("### 错题数据统计")
+                refresh_btn = gr.Button("刷新统计数据", variant="primary")
 
-            with gr.Tabs() as display_tabs:
-                # 统计概览标签页
-                with gr.TabItem("统计概览"):
-                    # 设置初始值为"正在加载..."或默认值
-                    stats_md = gr.Markdown("正在加载统计数据...", elem_id="stats_overview")
+                with gr.Tabs() as display_tabs:
+                    # 统计概览标签页
+                    with gr.TabItem("统计概览"):
+                        # 设置初始值为"正在加载..."或默认值
+                        stats_md = gr.Markdown("正在加载统计数据...", elem_id="stats_overview")
 
-                # 最近错题标签页
-                with gr.TabItem("最近错题"):
-                    with gr.Row():
-                        # 设置初始值为空 DataFrame
-                        recent_questions = gr.DataFrame(
-                            headers=["题目ID", "科目", "题型", "难度", "时间"],
-                            label="最近添加的错题",
-                            wrap=True,
-                            value=pd.DataFrame(columns=["题目ID", "科目", "题型", "难度", "时间"]) # 初始空 DF
-                        )
+                    # 最近错题标签页
+                    with gr.TabItem("最近错题"):
+                        with gr.Row():
+                            # 设置初始值为空 DataFrame
+                            recent_questions = gr.DataFrame(
+                                headers=["题目ID", "科目", "题型", "难度", "时间"],
+                                label="最近添加的错题",
+                                wrap=True,
+                                value=pd.DataFrame(columns=["题目ID", "科目", "题型", "难度", "时间"]) # 初始空 DF
+                            )
 
-            # --- 移除这里的初始加载代码 ---
-            # 不再在这里手动调用 get_statistics 和设置 value
+                # 刷新按钮事件 (现在需要传递 db 实例)
+                # 使用 lambda 来捕获当前的 db 实例给 get_statistics
+                refresh_btn.click(
+                    lambda: get_statistics(db), # 使用 lambda 捕获此作用域中的 db 实例
+                    outputs=[system_status, last_refresh, processed_count, question_count, stats_md, recent_questions]
+                )
 
-            # 刷新按钮事件 (现在需要传递 db 实例)
-            # 使用 lambda 来捕获当前的 db 实例给 get_statistics
-            refresh_btn.click(
-                lambda: get_statistics(db), # 使用 lambda 捕获此作用域中的 db 实例
-                outputs=[system_status, last_refresh, processed_count, question_count, stats_md, recent_questions]
-            )
+                # 点击最近错题 (逻辑基本不变，但需要确保能从 DataFrame 获取数据)
+                def on_question_click(evt: gr.SelectData, current_df: pd.DataFrame): # 接收当前 DataFrame 作为输入
+                    if not evt or evt.index is None:
+                        logger.warning("on_question_click: 无效的点击事件或索引。")
+                        return
 
-            # 点击最近错题 (逻辑基本不变，但需要确保能从 DataFrame 获取数据)
-            def on_question_click(evt: gr.SelectData, current_df: pd.DataFrame): # 接收当前 DataFrame 作为输入
-                if not evt or evt.index is None:
-                    logger.warning("on_question_click: 无效的点击事件或索引。")
-                    return
+                    try:
+                        row_index = evt.index[0]
+                        # 从传入的 DataFrame 中获取 ID (检查非空和索引有效性)
+                        if current_df is not None and not current_df.empty and 0 <= row_index < len(current_df):
+                            question_id = current_df.iloc[row_index]["题目ID"]
+                            gr.Info(f"已选择错题ID: {question_id}，请前往「错题查询」页面查看详情")
+                            logger.info(f"用户点击了最近错题列表中的 ID: {question_id}")
+                        else:
+                             warning_msg = "无法获取选中的错题信息"
+                             if current_df is None or current_df.empty:
+                                 warning_msg += "，数据为空，请先刷新。"
+                             else:
+                                 warning_msg += f"，索引 {row_index} 无效。"
+                             gr.Warning(warning_msg)
+                             logger.warning(f"on_question_click: {warning_msg} (DataFrame is None or empty: {current_df is None or current_df.empty}, index: {row_index}, len: {len(current_df) if current_df is not None else 'N/A'})")
+                    except Exception as e:
+                        gr.Warning(f"查看错题详情失败: {str(e)}")
+                        logger.error(f"on_question_click 处理出错: {e}", exc_info=True)
 
-                try:
-                    row_index = evt.index[0]
-                    # 从传入的 DataFrame 中获取 ID (检查非空和索引有效性)
-                    if current_df is not None and not current_df.empty and 0 <= row_index < len(current_df):
-                        question_id = current_df.iloc[row_index]["题目ID"]
-                        gr.Info(f"已选择错题ID: {question_id}，请前往「错题查询」页面查看详情")
-                        logger.info(f"用户点击了最近错题列表中的 ID: {question_id}")
-                    else:
-                         warning_msg = "无法获取选中的错题信息"
-                         if current_df is None or current_df.empty:
-                             warning_msg += "，数据为空，请先刷新。"
-                         else:
-                             warning_msg += f"，索引 {row_index} 无效。"
-                         gr.Warning(warning_msg)
-                         logger.warning(f"on_question_click: {warning_msg} (DataFrame is None or empty: {current_df is None or current_df.empty}, index: {row_index}, len: {len(current_df) if current_df is not None else 'N/A'})")
-                except Exception as e:
-                    gr.Warning(f"查看错题详情失败: {str(e)}")
-                    logger.error(f"on_question_click 处理出错: {e}", exc_info=True)
-
-            # select 事件现在需要将 DataFrame 组件本身作为输入传递给处理函数
-            recent_questions.select(
-                on_question_click,
-                inputs=[recent_questions], # 传递 DataFrame 组件，其 value 会作为参数传入
-                outputs=None # select 事件通常不直接更新输出，而是触发通知或状态变化
-            )
+                # select 事件现在需要将 DataFrame 组件本身作为输入传递给处理函数
+                recent_questions.select(
+                    on_question_click,
+                    inputs=[recent_questions], # 传递 DataFrame 组件，其 value 会作为参数传入
+                    outputs=None # select 事件通常不直接更新输出，而是触发通知或状态变化
+                )
 
     # --- 返回需要被 app.load 更新的组件 和 获取数据的函数 ---
     # 创建一个无参数的 lambda 函数，它在执行时会调用 get_statistics 并传入先前创建的 db 实例

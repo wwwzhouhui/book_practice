@@ -115,35 +115,38 @@ def create_upload_page():
         with gr.Tabs() as upload_tabs:
             # 图片上传标签页
             with gr.TabItem("图片上传"):
-                subject_select = gr.Dropdown(
-                    choices=["数学", "物理", "化学"],
-                    label="选择学科",
-                    value="数学"
-                )
+                with gr.Column(variant="panel"):
+                    subject_select = gr.Dropdown(
+                        choices=["数学", "物理", "化学"],
+                        label="选择学科",
+                        value="数学"
+                    )
 
-                # 添加示例图片展示区域
-                example_gallery = gr.Gallery(
-                    label="题库案例（双击选择）",
-                    value=get_example_images(),
-                    columns=4,
-                    height=200,
-                    show_label=True,
-                    elem_id="example_gallery"
-                )
+                    with gr.Row(equal_height=True):
+                        with gr.Column(scale=2, variant="panel"):
+                            # 上传作业部分
+                            file_input = gr.File(
+                                label="上传作业图片",
+                                file_types=["image"],
+                                file_count="multiple" # 允许多文件
+                            )
+                            upload_button = gr.Button("开始处理", variant="primary")
+                            
+                            # 处理状态
+                            status = gr.Textbox(label="处理状态", lines=8)
 
-                # 上传作业部分
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        file_input = gr.File(
-                            label="上传作业图片",
-                            file_types=["image"],
-                            file_count="multiple" # 允许多文件
-                        )
-                        upload_button = gr.Button("开始处理", variant="primary")
+                            # 添加示例图片展示区域
+                            example_gallery = gr.Gallery(
+                                label="题库案例（双击选择）",
+                                value=get_example_images(),
+                                columns=4,
+                                height=200,
+                                show_label=True,
+                                elem_id="example_gallery"
+                            )
 
-                    with gr.Column(scale=3):
-                        preview = gr.Image(label="预览", show_label=True)
-                        status = gr.Textbox(label="处理状态", lines=8)
+                        with gr.Column(scale=3, variant="panel"):
+                            preview = gr.Image(label="预览", show_label=True)
 
                 # 添加双击事件处理
                 def gallery_select(evt: gr.SelectData):
@@ -177,14 +180,21 @@ def create_upload_page():
                 )
             # 手动录入标签页
             with gr.TabItem("手动录入"):
-                with gr.Group():
+                with gr.Column(variant="panel"):
                     gr.Markdown("### 错题信息")
 
-                    question_text = gr.Textbox(
-                        label="题目内容",
-                        placeholder="请输入题目内容...",
-                        lines=4
-                    )
+                    with gr.Row(equal_height=True):
+                        with gr.Column(scale=5):
+                            question_text = gr.Textbox(
+                                label="题目内容",
+                                placeholder="请输入题目内容...",
+                                lines=6
+                            )
+
+                        with gr.Column(scale=1):
+                            with gr.Row():
+                                save_btn = gr.Button("保存错题", variant="primary")
+                                clear_btn = gr.Button("清空表单", variant="secondary")
 
                     with gr.Row():
                         subject = gr.Dropdown(
@@ -222,15 +232,11 @@ def create_upload_page():
                         lines=3
                     )
 
-                    with gr.Row():
-                        save_btn = gr.Button("保存错题", variant="primary")
-                        clear_btn = gr.Button("清空表单", variant="secondary")
-
                     save_result = gr.Markdown()
 
             # 批量导入标签页
             with gr.TabItem("批量导入"):
-                with gr.Group():
+                with gr.Column(variant="panel"):
                     gr.Markdown("### 批量导入错题")
 
                     with gr.Accordion("生成示例数据", open=True):

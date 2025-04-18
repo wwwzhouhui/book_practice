@@ -14,9 +14,11 @@ python-multipart==0.0.20
 # AI/ML 相关
 torch>=2.4.0
 transformers==4.50.3
-openai==1.30.1
+openai==1.72.0
 
 # 其他工具包
 numpy==2.2.4
 pandas>=2.2.3
 python-dotenv>=1.0.0
+
+reportlab # 生成pdf，导出题目
