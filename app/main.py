@@ -138,10 +138,21 @@ if __name__ == "__main__":
     try:
         app = create_app()
         logger.info("准备启动 Gradio 应用...")
-        # 运行 Gradio 应用
-        app.launch(server_name="0.0.0.0", server_port=7860)
-        # launch 是阻塞的，所以下面的日志通常在服务器停止后才会打印
-        logger.info("Gradio 应用已停止。")
+        # 尝试在7860-7866范围内寻找可用端口
+        for port in range(7860, 7867):
+            try:
+                app.launch(server_name="0.0.0.0", server_port=port)
+                logger.info(f"Gradio 应用已在端口 {port} 启动。")
+                break
+            except OSError as e:
+                if "Cannot find empty port" in str(e):
+                    logger.warning(f"端口 {port} 已被占用，尝试下一个端口...")
+                    continue
+                else:
+                    raise e
+        else:
+            logger.critical("无法在7860-7866范围内找到可用端口")
+            sys.exit("致命错误：无法找到可用端口")
     except Exception as e:
         logger.critical(f"应用程序启动失败: {e}", exc_info=True)
         sys.exit(f"致命错误：无法启动应用程序 - {e}")
