@@ -52,9 +52,11 @@ class QuestionGenerator:
             for source in source_questions:
                 # 构建提示词
                 prompt = self._build_generation_prompt(source, count)
-                
+                logger.info(f"生成同类题提示词: {prompt}")
                 # 调用AI生成
                 generated_list = self._call_ai_model(source, prompt)
+                logger.info(f"生成的同类题: {generated_list}")
+                logger.info(f"生成的同类题数量: {generated_list.count}")
                 if generated_list:
                     # 遍历生成的题目列表
                     for generated in generated_list:
@@ -84,7 +86,7 @@ class QuestionGenerator:
 
 ## Profile
 
-- Author: Assistant
+- Author: 周辉
 - Version: 1.1
 - Language: 中文
 - Description: 我是一位专门生成同类型错题的AI助手。我能根据给定的原始题目生成多个相似的新题目，涵盖多种题型和学科。

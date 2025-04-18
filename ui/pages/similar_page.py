@@ -3,6 +3,14 @@ import pandas as pd
 from modules.storage.database import Database
 from modules.ai_generator.question_generator import QuestionGenerator
 import logging
+from datetime import datetime
+import os
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +20,10 @@ def create_similar_page():
     # 初始化数据库和生成器
     db = Database()
     generator = QuestionGenerator()
+    
+    # 确保导出目录存在
+    export_dir = os.path.join(os.getcwd(), "exports")
+    os.makedirs(export_dir, exist_ok=True)
     
     with gr.Tab("生成同类题"):
         with gr.Row():
@@ -75,6 +87,11 @@ def create_similar_page():
                 with gr.Row():
                     result_status = gr.Text(label="生成状态", interactive=False)
                     save_btn = gr.Button("保存生成结果", interactive=False)
+                    export_questions_btn = gr.Button("导出题目", interactive=False)  # 修改按钮
+                    export_answers_btn = gr.Button("导出答案", interactive=False)   # 新增按钮
+                    
+                # 添加下载文件组件
+                download_file = gr.File(label="下载文件", visible=False, interactive=True)
 
         # 定义事件处理函数
         def search_questions(subject, question_type, date_range):
@@ -150,7 +167,13 @@ def create_similar_page():
                 )
                 
                 if not generated:
-                    return "生成失败", gr.update(value=None), gr.update(interactive=False)
+                    return (
+                        "生成失败", 
+                        gr.update(value=None), 
+                        gr.update(interactive=False),  # save_btn
+                        gr.update(interactive=False),  # export_questions_btn
+                        gr.update(interactive=False)   # export_answers_btn
+                    )
                 
                 # 转换为DataFrame
                 df = pd.DataFrame({
@@ -159,11 +182,23 @@ def create_similar_page():
                     "解析": [q["explanation"] for q in generated]
                 })
                 
-                return "生成成功", gr.update(value=df), gr.update(interactive=True)
+                return (
+                    "生成成功", 
+                    gr.update(value=df), 
+                    gr.update(interactive=True),  # save_btn
+                    gr.update(interactive=True),  # export_questions_btn
+                    gr.update(interactive=True)   # export_answers_btn
+                )
                 
             except Exception as e:
                 logger.error(f"生成同类题失败: {str(e)}")
-                return f"生成失败: {str(e)}", gr.update(value=None), gr.update(interactive=False)
+                return (
+                    f"生成失败: {str(e)}", 
+                    gr.update(value=None), 
+                    gr.update(interactive=False),  # save_btn
+                    gr.update(interactive=False),  # export_questions_btn
+                    gr.update(interactive=False)   # export_answers_btn
+                )
 
         def save_generated_questions(result_df, selected_count):
             """保存生成的题目"""
@@ -205,6 +240,117 @@ def create_similar_page():
                 logger.error(f"保存生成题目失败: {str(e)}")
                 return f"保存失败: {str(e)}"
 
+        def export_to_pdf(result_df, export_type="questions"):
+            """导出生成结果到PDF"""
+            try:
+                if result_df is None or len(result_df) == 0:
+                    return "没有可导出的数据", None, gr.update(visible=False)
+
+                # 创建时间戳
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                file_prefix = "题目" if export_type == "questions" else "答案"
+                pdf_path = os.path.join(export_dir, f"{file_prefix}_{timestamp}.pdf")
+
+                # 创建PDF文档
+                doc = SimpleDocTemplate(
+                    pdf_path,
+                    pagesize=A4,
+                    rightMargin=72,
+                    leftMargin=72,
+                    topMargin=72,
+                    bottomMargin=72
+                )
+
+                # 注册中文字体
+                try:
+                    font_paths = [
+                        "C:/Windows/Fonts/simhei.ttf",  # Windows
+                        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",  # Linux
+                        "/System/Library/Fonts/PingFang.ttc",  # macOS
+                        os.path.join(os.getcwd(), "fonts", "simhei.ttf"),  # 项目目录
+                    ]
+                    
+                    font_registered = False
+                    for font_path in font_paths:
+                        if os.path.exists(font_path):
+                            pdfmetrics.registerFont(TTFont('SimHei', font_path))
+                            font_registered = True
+                            break
+                    
+                    if not font_registered:
+                        raise Exception("未找到合适的中文字体")
+
+                except Exception as e:
+                    logger.error(f"字体注册失败: {str(e)}")
+                    return f"❌ PDF生成失败: 字体注册错误", None, gr.update(visible=False)
+
+                # 创建样式
+                styles = getSampleStyleSheet()
+                styles.add(ParagraphStyle(
+                    name='Chinese',
+                    fontName='SimHei',
+                    fontSize=12,
+                    leading=20
+                ))
+                
+                # 准备内容
+                elements = []
+                
+                # 添加标题
+                title_style = ParagraphStyle(
+                    'CustomTitle',
+                    parent=styles['Title'],
+                    fontName='SimHei',
+                    fontSize=24,
+                    spaceAfter=30,
+                    alignment=1  # 居中对齐
+                )
+                title_text = "同类题目练习题" if export_type == "questions" else "同类题目答案解析"
+                elements.append(Paragraph(title_text, title_style))
+                elements.append(Spacer(1, 12))
+
+                # 遍历每个题目
+                for idx, row in result_df.iterrows():
+                    # 题目标题
+                    elements.append(Paragraph(
+                        f"题目 {idx + 1}",
+                        ParagraphStyle(
+                            'QuestionTitle',
+                            parent=styles['Heading2'],
+                            fontName='SimHei',
+                            fontSize=14,
+                            textColor=colors.HexColor('#0066CC')
+                        )
+                    ))
+                    elements.append(Spacer(1, 12))
+                    
+                    if export_type == "questions":
+                        # 只导出题目内容
+                        elements.append(Paragraph(row["题目内容"], styles["Chinese"]))
+                    else:
+                        # 导出答案和解析
+                        elements.append(Paragraph("题目:", styles["Chinese"]))
+                        elements.append(Paragraph(row["题目内容"], styles["Chinese"]))
+                        elements.append(Spacer(1, 12))
+                        
+                        elements.append(Paragraph("答案:", styles["Chinese"]))
+                        elements.append(Paragraph(row["答案"], styles["Chinese"]))
+                        elements.append(Spacer(1, 12))
+                        
+                        elements.append(Paragraph("解析:", styles["Chinese"]))
+                        elements.append(Paragraph(row["解析"], styles["Chinese"]))
+                    
+                    elements.append(Spacer(1, 20))
+
+                # 生成PDF
+                doc.build(elements)
+                
+                return f"✅ {file_prefix}PDF生成成功，请点击下载", pdf_path, gr.update(visible=True)
+
+            except Exception as e:
+                logger.error(f"PDF生成失败: {str(e)}")
+                return f"❌ PDF生成失败: {str(e)}", None, gr.update(visible=False)
+
         # 绑定事件处理函数
         search_btn.click(
             search_questions,
@@ -221,7 +367,7 @@ def create_similar_page():
         generate_btn.click(
             generate_similar_questions,
             inputs=[selected_count, gen_count],
-            outputs=[result_status, generated_table, save_btn]
+            outputs=[result_status, generated_table, save_btn, export_questions_btn, export_answers_btn]
         )
         
         save_btn.click(
@@ -229,8 +375,27 @@ def create_similar_page():
             inputs=[generated_table, selected_count],  # 添加 selected_count 作为输入
             outputs=[result_status]
         )
+        
+        # 导出题目按钮事件绑定
+        export_questions_btn.click(
+            lambda df: export_to_pdf(df, "questions"),
+            inputs=[generated_table],
+            outputs=[result_status, download_file, download_file]
+        )
+        
+        # 导出答案按钮事件绑定
+        export_answers_btn.click(
+            lambda df: export_to_pdf(df, "answers"),
+            inputs=[generated_table],
+            outputs=[result_status, download_file, download_file]
+        )
 
     return "生成同类题"
+
+
+
+
+
 
 
 
