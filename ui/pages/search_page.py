@@ -486,16 +486,16 @@ def create_search_page():
                     gr.update(visible=False),           # 隐藏查看模式组
                     gr.update(visible=True),            # 显示编辑模式组
                     gr.update(visible=False),           # 隐藏解析（只读模式）
-                    gr.update(visible=True, value=question["explanation"]),  # 显示解析编辑框
+                    gr.update(visible=True, value=str(question.get("explanation", ""))),  # 显示解析编辑框，确保是字符串
                     gr.update(visible=False),           # 隐藏编辑按钮
                     gr.update(visible=True),            # 显示保存按钮
-                    question["question_text"],          # 题目内容
-                    question["subject"],                # 学科
-                    question["question_type"],          # 题型
-                    question["difficulty"],             # 难度
-                    question["created_at"],             # 创建时间
-                    question["answer"],                 # 正确答案
-                    question["user_answer"]             # 用户答案
+                    str(question.get("question_text", "")),          # 题目内容
+                    str(question.get("subject", "")),                # 学科
+                    str(question.get("question_type", "")),          # 题型
+                    int(question.get("difficulty", 3)),             # 难度
+                    str(question.get("created_at", "")),             # 创建时间
+                    str(question.get("answer", "")),                 # 正确答案
+                    str(question.get("user_answer", ""))             # 用户答案
                 )
             else:  # 退出编辑模式
                 return (
@@ -523,8 +523,8 @@ def create_search_page():
                 if not question_id:
                     return "❌ 保存失败：未选择题目", False
 
-                # 验证输入数据
-                if not question_text.strip():
+                # 验证输入数据并确保类型正确
+                if not str(question_text).strip():
                     return "❌ 保存失败：题目内容不能为空", False
 
                 if not subject:
@@ -532,52 +532,32 @@ def create_search_page():
 
                 if not question_type:
                     return "❌ 保存失败：请选择题型", False
-
+                    
+                # 确保难度是整数并在有效范围内
+                try:
+                    difficulty = int(difficulty)
+                    if not (1 <= difficulty <= 5):
+                        difficulty = max(1, min(5, difficulty))  # 限制在1-5范围内
+                except (TypeError, ValueError):
+                    difficulty = 3  # 默认值
+                    
                 # 构建更新数据
                 update_data = {
-                    "question_text": question_text,
-                    "subject": subject,
-                    "question_type": question_type,
+                    "question_text": str(question_text),
+                    "subject": str(subject),
+                    "question_type": str(question_type),
                     "difficulty": int(difficulty),
-                    "answer": correct_answer or "",
-                    "user_answer": user_answer or "",
-                    "explanation": explanation or ""
+                    "answer": str(correct_answer or ""),
+                    "user_answer": str(user_answer or ""),
+                    "explanation": str(explanation or "")
                 }
 
                 # 更新数据库
                 success = db.update_error_question(question_id, update_data)
 
                 if success:
-                    # 重新获取题目详情用于更新界面
-                    question = db.get_error_question(question_id)
-                    if not question:
-                        logger.error(f"更新后无法获取错题: ID={question_id}")
-                        return "❌ 保存失败：更新后无法获取错题详情", False
-
-                    difficulty_stars = "⭐" * question["difficulty"]
-                    detail_text = f"""
-### 题目内容
-
-{question["question_text"]}
-"""
-                    return (
-                        "✅ 保存成功！",
-                        True,
-                        gr.update(visible=True),      # 显示查看模式组
-                        gr.update(visible=False),     # 隐藏编辑模式组
-                        detail_text,                  # 更新题目详情
-                        question["subject"],          # 更新科目
-                        question["question_type"],    # 更新题型
-                        difficulty_stars,             # 更新难度
-                        question["created_at"],       # 更新创建时间
-                        question["answer"],           # 更新正确答案
-                        question["user_answer"],      # 更新用户答案
-                        question["explanation"],      # 更新解析
-                        gr.update(visible=True),      # 显示解析只读框
-                        gr.update(visible=False),     # 隐藏解析编辑框
-                        gr.update(visible=True),      # 显示编辑按钮
-                        gr.update(visible=False)      # 隐藏保存按钮
-                    )
+                    # 只返回状态消息和成功标志
+                    return "✅ 保存成功！", True
                 else:
                     return "❌ 保存失败：可能是数据库错误", False
 
@@ -587,94 +567,99 @@ def create_search_page():
                 return f"❌ 保存失败: {str(e)}", False
 
         # 显示错题详情
+        # 在paste-2.txt文件中找到show_question_detail函数
         def show_question_detail(evt: gr.SelectData):
             """显示错题详情"""
             try:
                 row_index = evt.index[0] if evt and hasattr(evt, 'index') else -1
                 df_value = results.value if results else None
                 
-                # 数据有效性检查
-                if df_value is None or df_value.empty or "题目ID" not in df_value.columns:
-                    logger.warning("显示详情时数据无效，正在刷新...")
-                    return handle_refresh_click()
+                # 使用process_dataframe_structure处理df_value
+                if df_value is not None:
+                    try:
+                        df_value = process_dataframe_structure(df_value)
+                        logger.info(f"处理后的DataFrame列: {df_value.columns.tolist() if hasattr(df_value, 'columns') else 'N/A'}")
+                    except Exception as e:
+                        logger.error(f"处理DataFrame结构失败: {str(e)}")
+                        return False, f"处理数据格式失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+                
+                # 检查df_value的有效性
+                if df_value is None or not isinstance(df_value, pd.DataFrame) or df_value.empty or "题目ID" not in df_value.columns:
+                    logger.warning("数据无效或缺少题目ID列，正在刷新...")
+                    return False, "数据无效，请刷新页面", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+                
+                # 检查行索引是否有效
+                if not (0 <= row_index < len(df_value)):
+                    logger.warning(f"行索引{row_index}超出范围(0-{len(df_value)-1})")
+                    return False, f"选择的行索引{row_index}无效，请重新选择", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
 
+                # 获取题目ID
                 try:
                     question_id = int(df_value.iloc[row_index]["题目ID"])
+                    logger.info(f"成功获取题目ID: {question_id}")
                 except (ValueError, TypeError, IndexError) as e:
                     logger.error(f"获取题目ID失败: {str(e)}")
-                    return handle_refresh_click()
+                    return False, f"获取题目ID失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
 
                 # 查询题目详情
                 question = db.get_error_question(question_id)
                 
                 # 如果题目不存在
                 if not question:
-                    logger.warning(f"错题不存在 (ID={question_id})，正在刷新数据...")
-                    # 刷新数据
-                    status_msg, new_data = refresh_data()
-                    
-                    error_message = f"""### ⚠️ 错题不存在
-
-该错题（ID: {question_id}）可能已被删除或ID无效。
-数据已自动刷新，请重新选择一道题目。
-
-当前状态: {status_msg}"""
-
-                    return [
-                        status_msg,    # 状态消息
-                        new_data,      # 刷新后的数据表格
-                        gr.update(visible=True),  # 详情容器
-                        False,         # 编辑状态
-                        error_message, # 错误提示
-                        *[""] * 7,     # 清空详情字段
-                        -1,           # 重置行索引
-                        None,         # 重置题目ID
-                        gr.update(visible=True),   # 编辑按钮
-                        gr.update(visible=False),  # 保存按钮
-                        gr.update(visible=True),   # 删除按钮
-                        gr.update(visible=False)   # 取消按钮
-                    ]
+                    logger.warning(f"题目ID={question_id}不存在")
+                    error_message = f"### ⚠️ 错题不存在\n\n该错题（ID: {question_id}）可能已被删除或ID无效。"
+                    return False, error_message, "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
 
                 # 题目存在，显示详情
+                logger.info(f"成功找到题目: ID={question_id}")
                 difficulty_stars = "⭐" * question["difficulty"]
-                detail_text = f"""### 题目内容
-
-{question["question_text"]}
-
-### 基本信息
-- 科目：{question["subject"]}
-- 题型：{question["question_type"]}
-- 难度：{difficulty_stars}
-- 提交时间：{question["created_at"]}
-"""
+                detail_text = f"""### 题目内容\n\n{question["question_text"]}\n\n### 基本信息\n- 科目：{question["subject"]}\n- 题型：{question["question_type"]}\n- 难度：{difficulty_stars}\n- 提交时间：{question["created_at"]}"""
                 
-                logger.info(f"成功加载错题详情: ID={question_id}")
-                return [
-                    query_status.value,  # 保持当前状态消息
-                    results.value,       # 保持当前数据表格
-                    gr.update(visible=True),  # 详情容器
-                    False,              # 编辑状态
-                    detail_text,        # 详情文本
-                    question["subject"],
-                    question["question_type"],
-                    difficulty_stars,
-                    question["created_at"],
-                    question["answer"],
-                    question["user_answer"],
-                    question["explanation"] or "无解析",
-                    row_index,
-                    question_id,
-                    gr.update(visible=True),   # 编辑按钮
-                    gr.update(visible=False),  # 保存按钮
-                    gr.update(visible=True),   # 删除按钮
-                    gr.update(visible=False)   # 取消按钮
-                ]
+                # 确保所有值都是字符串类型
+                subject = str(question.get("subject", ""))
+                question_type = str(question.get("question_type", ""))
+                created_at = str(question.get("created_at", ""))
+                answer = str(question.get("answer", ""))
+                user_answer = str(question.get("user_answer", ""))
+                explanation = str(question.get("explanation", "无解析"))
+                
+                # 关键修改：不要直接设置组件的visible属性，而是返回gr.update()
+                # 删除这些直接设置可见性的代码:
+                # question_detail_group.visible = True
+                # view_mode_group.visible = True
+                # edit_mode_group.visible = False
+                
+                # 返回值 - 确保每一个值都是正确的类型，且与outputs列表匹配
+                return False, detail_text, subject, question_type, difficulty_stars, created_at, answer, user_answer, explanation, row_index, question_id, explanation, gr.update(visible=True), gr.update(visible=False)
 
             except Exception as e:
                 logger.error(f"显示错题详情时出错: {str(e)}")
                 logger.error(traceback.format_exc())
-                return handle_refresh_click()
+                # 返回安全的默认值
+                return False, f"显示详情时出错: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+        # 添加规范化字典的函数
+        def normalize_dict(d):
+            """确保字典中所有键的值具有相同的长度"""
+            # 找出字典中非空列表值的最大长度
+            max_len = 0
+            for v in d.values():
+                if isinstance(v, list) and len(v) > max_len:
+                    max_len = len(v)
 
+            # 规范化所有值为相同长度的列表
+            result = {}
+            for k, v in d.items():
+                if isinstance(v, list):
+                    # 如果是列表但长度不够，填充None
+                    if len(v) < max_len:
+                        result[k] = v + [None] * (max_len - len(v))
+                    else:
+                        result[k] = v
+                else:
+                    # 如果不是列表，创建一个填充了相同值的列表
+                    result[k] = [v] * max_len if max_len > 0 else []
+
+            return result
         # 辅助函数：文本换行处理
         def textwrap_text(text, font, max_width):
             """将文本按照给定宽度分割成多行"""
@@ -1158,7 +1143,7 @@ def create_search_page():
         # 返回列表视图
         def back_to_list():
             return [
-                gr.update(visible=False),  # question_detail_group
+                gr.update(visible=False),  # 修改：使用gr.update来控制Group的可见性
                 False,                     # edit_mode
                 "",                        # detail_markdown
                 "",                        # subject_display
@@ -1219,7 +1204,7 @@ def create_search_page():
         #             return f"❌ 删除错题时出错: {str(e)}", "加载数据失败", empty_df, gr.update(visible=False)
         def direct_delete(question_id):
             if not question_id:
-                return "请先选择要删除的错题", query_status.value, results.value, gr.update(visible=False)
+                return "请先选择要删除的错题", query_status.value, results.value, gr.update(visible=False)  # 修改：使用gr.update控制可见性
             
             try:
                 # 删除错题
@@ -1233,7 +1218,7 @@ def create_search_page():
                 else:
                     status_msg = f"❌ 删除失败：未找到ID为 {question_id} 的错题"
                 
-                # 返回可见性更新而不是组件本身
+                # 使用gr.update控制可见性
                 return status_msg, refresh_msg, refreshed_data, gr.update(visible=False)
             except Exception as e:
                 logger.error(f"删除错题时出错: {str(e)}")
@@ -1246,8 +1231,6 @@ def create_search_page():
                 except:
                     empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
                     return f"❌ 删除错题时出错: {str(e)}", "加载数据失败", empty_df, gr.update(visible=False)
-        # 保存编辑的函数
-
         # 保存编辑的处理函数
         def handle_save_edit(
             question_id,
@@ -1259,35 +1242,69 @@ def create_search_page():
             user_answer,
             explanation
         ):
-            # 保存编辑内容
-            status_msg, success = save_edited_question(
-                question_id,
-                question_text,
-                subject,
-                question_type,
-                difficulty,
-                correct_answer,
-                user_answer,
-                explanation
-            )
+            try:
+                # 确保所有值都是合适的类型
+                if question_id is None:
+                    return "❌ 保存失败：未选择题目", True, gr.update(visible=False), gr.update(visible=True), results.value, gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=True)
+                    
+                # 修改这里的调用方式，处理save_edited_question可能返回多个值的情况
+                result = save_edited_question(
+                    question_id,
+                    str(question_text),
+                    str(subject),
+                    str(question_type),
+                    int(difficulty),
+                    str(correct_answer),
+                    str(user_answer),
+                    str(explanation)
+                )
+                
+                # 检查返回值类型，并相应处理
+                if isinstance(result, tuple) and len(result) >= 2:
+                    # 如果返回多个值，第一个是状态消息，第二个是成功标志
+                    status_msg = result[0]
+                    success = result[1]
+                    
+                    # 如果成功且返回了完整的UI更新数据，直接使用
+                    if success and len(result) > 2:
+                        # 假设返回的是完整的UI更新列表
+                        return result
+                    elif success:
+                        # 成功但只返回了状态和标志，需要刷新数据
+                        refresh_msg, refreshed_data = load_all_data()
+                        return [
+                            status_msg,               # 状态消息
+                            False,                    # 退出编辑模式
+                            gr.update(visible=True),  # 显示查看模式
+                            gr.update(visible=False), # 隐藏编辑模式
+                            refreshed_data,           # 更新后的数据表格
+                            gr.update(visible=True),  # 显示解析只读框
+                            gr.update(visible=False), # 隐藏解析编辑框
+                            gr.update(visible=True),  # 显示编辑按钮
+                            gr.update(visible=False)  # 隐藏保存按钮
+                        ]
+                else:
+                    # 如果只返回一个值，假设是错误消息
+                    status_msg = str(result)
+                    success = False
+                    
+                    return [
+                        status_msg,
+                        True,  # 保持编辑模式
+                        gr.update(visible=False),
+                        gr.update(visible=True),
+                        results.value,
+                        gr.update(visible=False),
+                        gr.update(visible=True),
+                        gr.update(visible=False),
+                        gr.update(visible=True)
+                    ]
 
-            if success:
-                # 刷新列表数据
-                refresh_msg, refreshed_data = load_all_data()
+            except Exception as e:
+                logger.error(f"保存编辑失败: {str(e)}")
+                logger.error(traceback.format_exc())
                 return [
-                    status_msg,               # 状态消息
-                    False,                    # 退出编辑模式
-                    gr.update(visible=True),  # 显示查看模式
-                    gr.update(visible=False), # 隐藏编辑模式
-                    refreshed_data,           # 更新后的数据表格
-                    gr.update(visible=True),  # 显示解析只读框
-                    gr.update(visible=False), # 隐藏解析编辑框
-                    gr.update(visible=True),  # 显示编辑按钮
-                    gr.update(visible=False)  # 隐藏保存按钮
-                ]
-            else:
-                return [
-                    status_msg,
+                    f"❌ 保存失败: {str(e)}",
                     True,  # 保持编辑模式
                     gr.update(visible=False),
                     gr.update(visible=True),
@@ -1310,7 +1327,6 @@ def create_search_page():
             show_question_detail,
             None,  # 输入参数为空，因为我们使用的是事件对象
             [
-                question_detail_group,
                 edit_mode,
                 detail_markdown,
                 subject_display,
@@ -1322,14 +1338,12 @@ def create_search_page():
                 explanation,
                 selected_row_index,
                 selected_question_id,
-                view_mode_group,
-                edit_mode_group,
-                explanation,
                 explanation_edit,
-                edit_toggle_button,
-                save_button
+                question_detail_group,  # 确保这里包含了question_detail_group
+                edit_mode_group  # 确保这里包含了edit_mode_group
             ]
-        )# 编辑模式切换
+        )
+        # 编辑模式切换
         edit_toggle_button.click(
             toggle_edit_mode,
             inputs=[edit_mode, selected_question_id],
@@ -1376,7 +1390,6 @@ def create_search_page():
                 save_button
             ]
         )
-
         back_button.click(
             back_to_list,
             None,
