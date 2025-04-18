@@ -6,4 +6,6 @@ __pycache__/*
 # resources/*
 # results/*
 *.pyc
+*.db
+*.json
 data/homework.db
