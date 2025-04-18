@@ -182,11 +182,18 @@ def create_upload_page():
                 with gr.Group():
                     gr.Markdown("### 错题信息")
 
-                    question_text = gr.Textbox(
-                        label="题目内容",
-                        placeholder="请输入题目内容...",
-                        lines=4
-                    )
+                    with gr.Row(equal_height=True):
+                        with gr.Column(scale=5):
+                            question_text = gr.Textbox(
+                                label="题目内容",
+                                placeholder="请输入题目内容...",
+                                lines=6
+                            )
+
+                        with gr.Column(scale=1):
+                            with gr.Row():
+                                save_btn = gr.Button("保存错题", variant="primary")
+                                clear_btn = gr.Button("清空表单", variant="secondary")
 
                     with gr.Row():
                         subject = gr.Dropdown(
@@ -223,10 +230,6 @@ def create_upload_page():
                         placeholder="请输入解析说明...",
                         lines=3
                     )
-
-                    with gr.Row():
-                        save_btn = gr.Button("保存错题", variant="primary")
-                        clear_btn = gr.Button("清空表单", variant="secondary")
 
                     save_result = gr.Markdown()
 
