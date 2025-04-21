@@ -12,7 +12,7 @@ opencv-python==4.11.0.86
 python-multipart==0.0.20
 
 # AI/ML 相关
-torch>=2.4.0
+#torch>=2.4.0
 transformers==4.50.3
 openai==1.72.0
 
@@ -22,3 +22,4 @@ pandas>=2.2.3
 python-dotenv>=1.0.0
 
 reportlab # 生成pdf，导出题目
+python-docx==1.1.2

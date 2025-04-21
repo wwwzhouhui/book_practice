@@ -11,6 +11,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+import configparser
+import platform
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -240,8 +243,8 @@ def create_similar_page():
                 logger.error(f"保存生成题目失败: {str(e)}")
                 return f"保存失败: {str(e)}"
 
-        def export_to_pdf(result_df, export_type="questions"):
-            """导出生成结果到PDF"""
+        def export_to_word(result_df, export_type="questions"):
+            """导出生成结果到Word文档"""
             try:
                 if result_df is None or len(result_df) == 0:
                     return "没有可导出的数据", None, gr.update(visible=False)
@@ -249,107 +252,78 @@ def create_similar_page():
                 # 创建时间戳
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 file_prefix = "题目" if export_type == "questions" else "答案"
-                pdf_path = os.path.join(export_dir, f"{file_prefix}_{timestamp}.pdf")
-
-                # 创建PDF文档
-                doc = SimpleDocTemplate(
-                    pdf_path,
-                    pagesize=A4,
-                    rightMargin=72,
-                    leftMargin=72,
-                    topMargin=72,
-                    bottomMargin=72
-                )
-
-                # 注册中文字体
+                
                 try:
-                    font_paths = [
-                        "C:/Windows/Fonts/simhei.ttf",  # Windows
-                        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",  # Linux
-                        "/System/Library/Fonts/PingFang.ttc",  # macOS
-                        os.path.join(os.getcwd(), "fonts", "simhei.ttf"),  # 项目目录
-                    ]
-                    
-                    font_registered = False
-                    for font_path in font_paths:
-                        if os.path.exists(font_path):
-                            pdfmetrics.registerFont(TTFont('SimHei', font_path))
-                            font_registered = True
-                            break
-                    
-                    if not font_registered:
-                        raise Exception("未找到合适的中文字体")
+                    # 使用python-docx导出Word文档
+                    from docx import Document
+                    from docx.shared import RGBColor
 
+                    doc_path = os.path.join(export_dir, f"{file_prefix}_{timestamp}.docx")
+                    doc = Document()
+
+                    # 添加标题
+                    title = doc.add_heading(f"相似题目集 - {file_prefix}", 0)
+                    title.alignment = 1  # 居中对齐
+
+                    # 遍历每道题目
+                    for i, row in result_df.iterrows():
+                        if export_type == "questions":
+                            # 导出题目部分
+                            # 题目标题
+                            heading = doc.add_heading(f"题目 {i+1}", level=2)
+
+                            # 设置标题颜色为蓝色
+                            for run in heading.runs:
+                                run.font.color.rgb = RGBColor(0, 102, 204)
+
+                            # 题目内容
+                            doc.add_paragraph(row["题目内容"])
+                        else:
+                            # 导出答案部分
+                            # 标题
+                            heading = doc.add_heading(f"题目 {i+1} 答案:", level=2)
+
+                            # 设置标题颜色为蓝色
+                            for run in heading.runs:
+                                run.font.color.rgb = RGBColor(0, 102, 204)
+
+                            # 题目内容
+                            doc.add_paragraph("题目:")
+                            doc.add_paragraph(row["题目内容"])
+
+                            # 答案
+                            answer_para = doc.add_paragraph()
+                            answer_run = answer_para.add_run("答案: ")
+                            answer_run.font.color.rgb = RGBColor(0, 128, 0)  # 绿色
+                            answer_para.add_run(row["答案"])
+
+                            # 解析
+                            if pd.notna(row["解析"]):
+                                explanation_para = doc.add_paragraph()
+                                explanation_run = explanation_para.add_run("解析: ")
+                                explanation_run.font.color.rgb = RGBColor(70, 130, 180)  # 钢青色
+                                explanation_para.add_run(row["解析"])
+
+                        # 添加分隔线（除了最后一题）
+                        if i < len(result_df) - 1:
+                            doc.add_paragraph("_" * 50)
+
+                    # 保存文档
+                    doc.save(doc_path)
+                    success_msg = f"✅ {file_prefix}Word文档生成成功，请点击下载"
+                    return success_msg, doc_path, gr.update(visible=True)
+
+                except ImportError:
+                    return "❌ 导出Word需要安装python-docx库，请使用命令：pip install python-docx", None, gr.update(visible=False)
                 except Exception as e:
-                    logger.error(f"字体注册失败: {str(e)}")
-                    return f"❌ PDF生成失败: 字体注册错误", None, gr.update(visible=False)
-
-                # 创建样式
-                styles = getSampleStyleSheet()
-                styles.add(ParagraphStyle(
-                    name='Chinese',
-                    fontName='SimHei',
-                    fontSize=12,
-                    leading=20
-                ))
-                
-                # 准备内容
-                elements = []
-                
-                # 添加标题
-                title_style = ParagraphStyle(
-                    'CustomTitle',
-                    parent=styles['Title'],
-                    fontName='SimHei',
-                    fontSize=24,
-                    spaceAfter=30,
-                    alignment=1  # 居中对齐
-                )
-                title_text = "同类题目练习题" if export_type == "questions" else "同类题目答案解析"
-                elements.append(Paragraph(title_text, title_style))
-                elements.append(Spacer(1, 12))
-
-                # 遍历每个题目
-                for idx, row in result_df.iterrows():
-                    # 题目标题
-                    elements.append(Paragraph(
-                        f"题目 {idx + 1}",
-                        ParagraphStyle(
-                            'QuestionTitle',
-                            parent=styles['Heading2'],
-                            fontName='SimHei',
-                            fontSize=14,
-                            textColor=colors.HexColor('#0066CC')
-                        )
-                    ))
-                    elements.append(Spacer(1, 12))
-                    
-                    if export_type == "questions":
-                        # 只导出题目内容
-                        elements.append(Paragraph(row["题目内容"], styles["Chinese"]))
-                    else:
-                        # 导出答案和解析
-                        elements.append(Paragraph("题目:", styles["Chinese"]))
-                        elements.append(Paragraph(row["题目内容"], styles["Chinese"]))
-                        elements.append(Spacer(1, 12))
-                        
-                        elements.append(Paragraph("答案:", styles["Chinese"]))
-                        elements.append(Paragraph(row["答案"], styles["Chinese"]))
-                        elements.append(Spacer(1, 12))
-                        
-                        elements.append(Paragraph("解析:", styles["Chinese"]))
-                        elements.append(Paragraph(row["解析"], styles["Chinese"]))
-                    
-                    elements.append(Spacer(1, 20))
-
-                # 生成PDF
-                doc.build(elements)
-                
-                return f"✅ {file_prefix}PDF生成成功，请点击下载", pdf_path, gr.update(visible=True)
+                    logger.error(f"Word导出失败: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    return f"❌ Word导出失败: {str(e)}", None, gr.update(visible=False)
 
             except Exception as e:
-                logger.error(f"PDF生成失败: {str(e)}")
-                return f"❌ PDF生成失败: {str(e)}", None, gr.update(visible=False)
+                logger.error(f"导出失败: {str(e)}")
+                logger.error(traceback.format_exc())
+                return f"❌ 导出失败: {str(e)}", None, gr.update(visible=False)
 
         # 绑定事件处理函数
         search_btn.click(
@@ -378,19 +352,23 @@ def create_similar_page():
         
         # 导出题目按钮事件绑定
         export_questions_btn.click(
-            lambda df: export_to_pdf(df, "questions"),
+            lambda df: export_to_word(df, "questions"),
             inputs=[generated_table],
             outputs=[result_status, download_file, download_file]
         )
         
         # 导出答案按钮事件绑定
         export_answers_btn.click(
-            lambda df: export_to_pdf(df, "answers"),
+            lambda df: export_to_word(df, "answers"),
             inputs=[generated_table],
             outputs=[result_status, download_file, download_file]
         )
 
     return "生成同类题"
+
+
+
+
 
 
 

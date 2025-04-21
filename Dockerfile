@@ -25,15 +25,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建字体目录
-RUN mkdir -p /app/fonts
+# 创建必要的目录
+RUN mkdir -p /usr/share/fonts/windows \
+    && mkdir -p /fonts
 
-# 复制项目字体文件（如果有的话）
-COPY fonts/ ./fonts/
+# 复制项目字体文件到Linux系统
+COPY fonts/simhei.ttf /usr/share/fonts/windows/
+COPY fonts/simsun.ttc /usr/share/fonts/windows/
 
-# 确保字体可用，创建备用字体链接
-RUN ln -sf /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc /app/fonts/simhei.ttf \
+# 设置字体权限并更新字体缓存
+RUN chmod 644 /usr/share/fonts/windows/* \
     && fc-cache -fv
+
+# 创建字体软链接（修改这部分）
+RUN cp /usr/share/fonts/windows/simhei.ttf /fonts/simhei.ttf \
+    && cp /usr/share/fonts/windows/simsun.ttc /fonts/simsun.ttc
 
 # 复制项目文件
 COPY requirements.txt .
@@ -54,4 +60,6 @@ EXPOSE 7860
 
 # 设置启动命令
 CMD ["python", "app/main.py"]
+
+
 

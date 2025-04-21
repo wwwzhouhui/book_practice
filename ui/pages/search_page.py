@@ -8,6 +8,8 @@ import csv
 import time
 import logging
 import traceback
+import configparser
+import platform
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -775,20 +777,31 @@ def create_search_page():
                         from reportlab.pdfbase import pdfmetrics
                         from reportlab.pdfbase.ttfonts import TTFont
 
+                        # 从配置文件获取字体路径
+                        config = configparser.ConfigParser()
+                        config.read('config.ini', encoding='utf-8')
+                        
+                        # 获取当前操作系统
+                        current_os = platform.system().lower()
+                        
+                        # 从配置获取对应操作系统的字体路径
+                        font_paths = []
+                        if current_os == 'windows':
+                            font_paths.extend(config.get('FONTS', 'windows_fonts', fallback='').split(','))
+                        elif current_os == 'linux':
+                            font_paths.extend(config.get('FONTS', 'linux_fonts', fallback='').split(','))
+                        elif current_os == 'darwin':  # macOS
+                            font_paths.extend(config.get('FONTS', 'macos_fonts', fallback='').split(','))
+                            
+                        # 添加项目本地字体路径
+                        local_fonts = config.get('FONTS', 'local_fonts', fallback='').split(',')
+                        font_paths.extend([os.path.join(os.getcwd(), font) for font in local_fonts if font])
+                        
+                        # 过滤空值并去除空白字符
+                        font_paths = [path.strip() for path in font_paths if path.strip()]
+
                         # 注册中文字体 - 尝试多个路径
                         font_registered = False
-                        font_paths = [
-                            # Windows 字体路径
-                            "C:/Windows/Fonts/simhei.ttf",
-                            "C:/Windows/Fonts/simsun.ttc",
-                            # Linux 字体路径
-                            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-                            # macOS 字体路径
-                            "/System/Library/Fonts/PingFang.ttc",
-                            # 项目内字体（如果有）
-                            os.path.join(os.getcwd(), "fonts", "simhei.ttf"),
-                        ]
-
                         for font_path in font_paths:
                             if os.path.exists(font_path):
                                 try:
