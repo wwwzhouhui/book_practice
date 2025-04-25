@@ -111,7 +111,7 @@ def create_home_page():
     with gr.Column() as home_page:
         with gr.Row():
             gr.Markdown("""
-            # 欢迎使用智能作业识别系统
+            # 欢迎使用辅导大师--基于AI教育的错题管理系统
 
             本系统可以帮助您:
 

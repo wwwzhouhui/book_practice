@@ -41,7 +41,7 @@ def create_app():
     home_get_statistics_func = None # 用于存储数据获取函数的占位符
 
     with app:
-        gr.Markdown("# 智能作业识别系统")
+        gr.Markdown("# 辅导大师--基于AI教育的错题管理系统")
 
         with gr.Tabs() as tabs:
             with gr.TabItem("首页"):
