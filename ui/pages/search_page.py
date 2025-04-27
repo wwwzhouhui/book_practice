@@ -1,15 +1,13 @@
-
 import gradio as gr
 import pandas as pd
 import numpy as np
 from modules.storage.database import Database
 import os
-import csv
-import time
 import logging
 import traceback
 import configparser
 import platform
+from modules.export.export_manager import ExportManager  # 保留导出管理器引用
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -18,6 +16,9 @@ def create_search_page():
     """创建错题查询页面"""
     # 初始化数据库
     db = Database()
+    
+    # 初始化导出管理器 - 从外部导入
+    export_mgr = ExportManager(db)
 
     with gr.Column() as search_page:
         gr.Markdown("## 错题查询")
@@ -65,7 +66,7 @@ def create_search_page():
 
             with gr.Column(scale=2):
                 export_format = gr.Dropdown(
-                    choices=["CSV", "PDF", "Word", "图片(A4)"],
+                    choices=["CSV", "PDF", "Word"],  # 移除"图片(A4)"选项
                     label="导出格式",
                     value="PDF"
                 )
@@ -215,55 +216,6 @@ def create_search_page():
                 empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
                 return f"加载数据出错: {str(e)}", empty_df
 
-        def refresh_data():
-            """刷新数据并更新界面"""
-            try:
-                # 执行数据一致性检查
-                db.verify_data_consistency()
-                
-                # 获取最新数据
-                status_msg, new_data = load_all_data()
-                
-                # 更新全局状态
-                if isinstance(results, gr.DataFrame):
-                    results.value = new_data
-                if isinstance(query_status, gr.Textbox):
-                    query_status.value = status_msg
-                
-                return status_msg, new_data
-            except Exception as e:
-                logger.error(f"刷新数据失败: {str(e)}")
-                logger.error(traceback.format_exc())
-                empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
-                error_msg = f"刷新数据失败: {str(e)}"
-                return error_msg, empty_df
-
-        def handle_refresh_click():
-            """处理刷新按钮点击事件"""
-            try:
-                status_msg, new_data = refresh_data()
-                # 清空详情区域
-                return [
-                    status_msg,  # 状态消息
-                    new_data,    # 数据表格
-                    gr.update(visible=True),  # 详情容器
-                    False,       # 编辑状态
-                    "### 请从列表中选择一道题目查看详情",  # 详情文本
-                    *[""] * 7,   # 清空其他详情字段
-                    -1,         # 重置行索引
-                    None,       # 重置题目ID
-                    gr.update(visible=True),   # 编辑按钮
-                    gr.update(visible=False),  # 保存按钮
-                    gr.update(visible=True),   # 删除按钮
-                    gr.update(visible=False)   # 取消按钮
-                ]
-            except Exception as e:
-                logger.error(f"刷新按钮处理失败: {str(e)}")
-                logger.error(traceback.format_exc())
-                empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
-                error_msg = f"刷新失败: {str(e)}"
-                return [error_msg, empty_df] + [gr.update(value="") for _ in range(12)]
-
         # 搜索功能实现
         def search_questions(search_text, subjects, time_range):
             logger.info(f"搜索条件: {search_text}, {subjects}, {time_range}")
@@ -355,7 +307,7 @@ def create_search_page():
                 query_status_text = f"搜索出错: {str(e)}"
 
                 return query_status_text, empty_df
-
+               
         # 处理DataFrame结构
         def process_dataframe_structure(df_value):
             """处理并转换非标准的DataFrame结构"""
@@ -467,6 +419,71 @@ def create_search_page():
 
             return result
 
+        # 显示错题详情
+        def show_question_detail(evt: gr.SelectData):
+            """显示错题详情"""
+            try:
+                row_index = evt.index[0] if evt and hasattr(evt, 'index') else -1
+                df_value = results.value if results else None
+                
+                # 使用process_dataframe_structure处理df_value
+                if df_value is not None:
+                    try:
+                        df_value = process_dataframe_structure(df_value)
+                        logger.info(f"处理后的DataFrame列: {df_value.columns.tolist() if hasattr(df_value, 'columns') else 'N/A'}")
+                    except Exception as e:
+                        logger.error(f"处理DataFrame结构失败: {str(e)}")
+                        return False, f"处理数据格式失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+                
+                # 检查df_value的有效性
+                if df_value is None or not isinstance(df_value, pd.DataFrame) or df_value.empty or "题目ID" not in df_value.columns:
+                    logger.warning("数据无效或缺少题目ID列，正在刷新...")
+                    return False, "数据无效，请刷新页面", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+                
+                # 检查行索引是否有效
+                if not (0 <= row_index < len(df_value)):
+                    logger.warning(f"行索引{row_index}超出范围(0-{len(df_value)-1})")
+                    return False, f"选择的行索引{row_index}无效，请重新选择", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+
+                # 获取题目ID
+                try:
+                    question_id = int(df_value.iloc[row_index]["题目ID"])
+                    logger.info(f"成功获取题目ID: {question_id}")
+                except (ValueError, TypeError, IndexError) as e:
+                    logger.error(f"获取题目ID失败: {str(e)}")
+                    return False, f"获取题目ID失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+
+                # 查询题目详情
+                question = db.get_error_question(question_id)
+                
+                # 如果题目不存在
+                if not question:
+                    logger.warning(f"题目ID={question_id}不存在")
+                    error_message = f"### ⚠️ 错题不存在\n\n该错题（ID: {question_id}）可能已被删除或ID无效。"
+                    return False, error_message, "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+
+                # 题目存在，显示详情
+                logger.info(f"成功找到题目: ID={question_id}")
+                difficulty_stars = "⭐" * question["difficulty"]
+                detail_text = f"""### 题目内容\n\n{question["question_text"]}\n\n### 基本信息\n- 科目：{question["subject"]}\n- 题型：{question["question_type"]}\n- 难度：{difficulty_stars}\n- 提交时间：{question["created_at"]}"""
+                
+                # 确保所有值都是字符串类型
+                subject = str(question.get("subject", ""))
+                question_type = str(question.get("question_type", ""))
+                created_at = str(question.get("created_at", ""))
+                answer = str(question.get("answer", ""))
+                user_answer = str(question.get("user_answer", ""))
+                explanation = str(question.get("explanation", "无解析"))
+                
+                # 使用gr.update控制可见性
+                return False, detail_text, subject, question_type, difficulty_stars, created_at, answer, user_answer, explanation, row_index, question_id, explanation, gr.update(visible=True), gr.update(visible=False)
+
+            except Exception as e:
+                logger.error(f"显示错题详情时出错: {str(e)}")
+                logger.error(traceback.format_exc())
+                # 返回安全的默认值
+                return False, f"显示详情时出错: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
+
         # 切换编辑模式
         def toggle_edit_mode(edit_state, question_id):
             if not question_id:
@@ -568,595 +585,10 @@ def create_search_page():
                 logger.error(traceback.format_exc())
                 return f"❌ 保存失败: {str(e)}", False
 
-        # 显示错题详情
-        # 在paste-2.txt文件中找到show_question_detail函数
-        def show_question_detail(evt: gr.SelectData):
-            """显示错题详情"""
-            try:
-                row_index = evt.index[0] if evt and hasattr(evt, 'index') else -1
-                df_value = results.value if results else None
-                
-                # 使用process_dataframe_structure处理df_value
-                if df_value is not None:
-                    try:
-                        df_value = process_dataframe_structure(df_value)
-                        logger.info(f"处理后的DataFrame列: {df_value.columns.tolist() if hasattr(df_value, 'columns') else 'N/A'}")
-                    except Exception as e:
-                        logger.error(f"处理DataFrame结构失败: {str(e)}")
-                        return False, f"处理数据格式失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-                
-                # 检查df_value的有效性
-                if df_value is None or not isinstance(df_value, pd.DataFrame) or df_value.empty or "题目ID" not in df_value.columns:
-                    logger.warning("数据无效或缺少题目ID列，正在刷新...")
-                    return False, "数据无效，请刷新页面", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-                
-                # 检查行索引是否有效
-                if not (0 <= row_index < len(df_value)):
-                    logger.warning(f"行索引{row_index}超出范围(0-{len(df_value)-1})")
-                    return False, f"选择的行索引{row_index}无效，请重新选择", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-
-                # 获取题目ID
-                try:
-                    question_id = int(df_value.iloc[row_index]["题目ID"])
-                    logger.info(f"成功获取题目ID: {question_id}")
-                except (ValueError, TypeError, IndexError) as e:
-                    logger.error(f"获取题目ID失败: {str(e)}")
-                    return False, f"获取题目ID失败: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-
-                # 查询题目详情
-                question = db.get_error_question(question_id)
-                
-                # 如果题目不存在
-                if not question:
-                    logger.warning(f"题目ID={question_id}不存在")
-                    error_message = f"### ⚠️ 错题不存在\n\n该错题（ID: {question_id}）可能已被删除或ID无效。"
-                    return False, error_message, "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-
-                # 题目存在，显示详情
-                logger.info(f"成功找到题目: ID={question_id}")
-                difficulty_stars = "⭐" * question["difficulty"]
-                detail_text = f"""### 题目内容\n\n{question["question_text"]}\n\n### 基本信息\n- 科目：{question["subject"]}\n- 题型：{question["question_type"]}\n- 难度：{difficulty_stars}\n- 提交时间：{question["created_at"]}"""
-                
-                # 确保所有值都是字符串类型
-                subject = str(question.get("subject", ""))
-                question_type = str(question.get("question_type", ""))
-                created_at = str(question.get("created_at", ""))
-                answer = str(question.get("answer", ""))
-                user_answer = str(question.get("user_answer", ""))
-                explanation = str(question.get("explanation", "无解析"))
-                
-                # 关键修改：不要直接设置组件的visible属性，而是返回gr.update()
-                # 删除这些直接设置可见性的代码:
-                # question_detail_group.visible = True
-                # view_mode_group.visible = True
-                # edit_mode_group.visible = False
-                
-                # 返回值 - 确保每一个值都是正确的类型，且与outputs列表匹配
-                return False, detail_text, subject, question_type, difficulty_stars, created_at, answer, user_answer, explanation, row_index, question_id, explanation, gr.update(visible=True), gr.update(visible=False)
-
-            except Exception as e:
-                logger.error(f"显示错题详情时出错: {str(e)}")
-                logger.error(traceback.format_exc())
-                # 返回安全的默认值
-                return False, f"显示详情时出错: {str(e)}", "", "", "", "", "", "", "", -1, None, "", gr.update(visible=True), gr.update(visible=False)
-        # 添加规范化字典的函数
-        def normalize_dict(d):
-            """确保字典中所有键的值具有相同的长度"""
-            # 找出字典中非空列表值的最大长度
-            max_len = 0
-            for v in d.values():
-                if isinstance(v, list) and len(v) > max_len:
-                    max_len = len(v)
-
-            # 规范化所有值为相同长度的列表
-            result = {}
-            for k, v in d.items():
-                if isinstance(v, list):
-                    # 如果是列表但长度不够，填充None
-                    if len(v) < max_len:
-                        result[k] = v + [None] * (max_len - len(v))
-                    else:
-                        result[k] = v
-                else:
-                    # 如果不是列表，创建一个填充了相同值的列表
-                    result[k] = [v] * max_len if max_len > 0 else []
-
-            return result
-        # 辅助函数：文本换行处理
-        def textwrap_text(text, font, max_width):
-            """将文本按照给定宽度分割成多行"""
-            words = text.split()
-            lines = []
-            current_line = words[0] if words else ""
-
-            for word in words[1:]:
-                # 计算添加新单词后的宽度
-                test_line = current_line + " " + word
-                width = font.getmask(test_line).getbbox()[2]
-
-                if width <= max_width:
-                    current_line = test_line
-                else:
-                    lines.append(current_line)
-                    current_line = word
-
-            lines.append(current_line)  # 添加最后一行
-            return lines
-
-        # 修改导出功能 - 支持直接下载
-        def export_results(dataframe, export_format="CSV", content_type="questions"):
-            """
-            导出错题数据
-
-            参数:
-            dataframe: 要导出的数据
-            export_format: 导出格式，可选 CSV, PDF, Word, 图片(A4)
-            content_type: 内容类型，可选 questions(只有题目), answers(只有答案)
-            """
-            if dataframe is None:
-                return "没有可导出的数据", None, gr.update(visible=False)
-
-            try:
-                # 处理数据结构
-                df = process_dataframe_structure(dataframe)
-
-                if df.empty:
-                    return "没有可导出的数据", None, gr.update(visible=False)
-
-                # 获取所有ID对应的完整数据
-                if "题目ID" not in df.columns:
-                    return f"❌ 导出失败: 数据缺少'题目ID'列", None, gr.update(visible=False)
-
-                ids = df["题目ID"].tolist()
-                full_data = []
-                missing_ids = []
-
-                for qid in ids:
-                    if pd.isna(qid):  # 跳过NaN值
-                        continue
-                    question = db.get_error_question(qid)
-                    if question:
-                        full_data.append(question)
-                    else:
-                        # 记录不存在的题目ID
-                        missing_ids.append(str(qid))
-
-                # 检查是否有缺失的题目
-                if missing_ids:
-                    logger.warning(f"导出时发现不存在的题目ID: {', '.join(missing_ids)}")
-                    if not full_data:  # 如果没有有效数据
-                        return f"❌ 导出失败: 所选题目均不存在 (缺失ID: {', '.join(missing_ids)})", None, gr.update(visible=False)
-
-                # 创建导出目录
-                export_dir = os.path.join(os.getcwd(), "exports")
-                os.makedirs(export_dir, exist_ok=True)
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-
-                # 根据内容类型设置文件名
-                if content_type == "questions":
-                    file_suffix = "题目"
-                else:
-                    file_suffix = "答案"
-
-                # 根据选择的格式导出
-                if export_format == "CSV":
-                    # CSV导出
-                    csv_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.csv")
-
-                    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-                        if content_type == "questions":
-                            # 只导出题目部分
-                            fieldnames = ["id", "subject", "question_type", "difficulty", "question_text"]
-                        else:
-                            # 只导出答案部分
-                            fieldnames = ["id", "subject", "question_type", "answer", "explanation"]
-
-                        writer = csv.DictWriter(f, fieldnames=fieldnames)
-                        writer.writeheader()
-
-                        for item in full_data:
-                            # 筛选需要的字段
-                            row = {field: item.get(field, '') for field in fieldnames}
-                            writer.writerow(row)
-
-                    success_msg = f"✅ 已成功导出 {len(full_data)} 条{file_suffix}至CSV文件，请点击下载"
-                    if missing_ids:
-                        success_msg += f" (注意: {len(missing_ids)} 条题目不存在，已跳过ID: {', '.join(missing_ids[:3])}{', ...' if len(missing_ids) > 3 else ''})"
-                    return success_msg, csv_path, gr.update(visible=True)
-
-                elif export_format == "PDF":
-                    try:
-                        # 导入所需模块
-                        import reportlab.lib.pagesizes as pagesizes
-                        import reportlab.platypus as platypus
-                        import reportlab.lib.styles as styles
-                        import reportlab.lib.colors as colors
-                        import reportlab.lib.enums as enums
-
-                        # 添加中文字体支持
-                        from reportlab.pdfbase import pdfmetrics
-                        from reportlab.pdfbase.ttfonts import TTFont
-
-                        # 从配置文件获取字体路径
-                        config = configparser.ConfigParser()
-                        config.read('config.ini', encoding='utf-8')
-                        
-                        # 获取当前操作系统
-                        current_os = platform.system().lower()
-                        
-                        # 从配置获取对应操作系统的字体路径
-                        font_paths = []
-                        if current_os == 'windows':
-                            font_paths.extend(config.get('FONTS', 'windows_fonts', fallback='').split(','))
-                        elif current_os == 'linux':
-                            font_paths.extend(config.get('FONTS', 'linux_fonts', fallback='').split(','))
-                        elif current_os == 'darwin':  # macOS
-                            font_paths.extend(config.get('FONTS', 'macos_fonts', fallback='').split(','))
-                            
-                        # 添加项目本地字体路径
-                        local_fonts = config.get('FONTS', 'local_fonts', fallback='').split(',')
-                        font_paths.extend([os.path.join(os.getcwd(), font) for font in local_fonts if font])
-                        
-                        # 过滤空值并去除空白字符
-                        font_paths = [path.strip() for path in font_paths if path.strip()]
-
-                        # 注册中文字体 - 尝试多个路径
-                        font_registered = False
-                        for font_path in font_paths:
-                            if os.path.exists(font_path):
-                                try:
-                                    logger.info(f"尝试注册字体: {font_path}")
-                                    # 注册字体
-                                    pdfmetrics.registerFont(TTFont('SimHei', font_path))
-                                    font_registered = True
-                                    logger.info(f"成功注册字体: {font_path}")
-                                    break
-                                except Exception as font_error:
-                                    logger.error(f"注册字体失败: {str(font_error)}")
-                                    continue
-
-                        # 创建PDF文档
-                        pdf_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.pdf")
-                        doc = platypus.SimpleDocTemplate(pdf_path, pagesize=pagesizes.A4)
-
-                        # 创建自定义样式
-                        style_sheet = styles.getSampleStyleSheet()
-
-                        # 修改所有样式以使用中文字体
-                        if font_registered:
-                            for style_name in style_sheet.byName:
-                                style_sheet[style_name].fontName = 'SimHei'
-
-                        title_style = styles.ParagraphStyle(
-                            'CustomTitle',
-                            parent=style_sheet['Title'],
-                            fontName='SimHei' if font_registered else style_sheet['Title'].fontName,
-                            textColor=colors.HexColor('#003399'),
-                            alignment=enums.TA_CENTER,
-                            spaceAfter=10
-                        )
-
-                        heading_style = styles.ParagraphStyle(
-                            'CustomHeading',
-                            parent=style_sheet['Heading2'],
-                            fontName='SimHei' if font_registered else style_sheet['Heading2'].fontName,
-                            textColor=colors.HexColor('#0066CC'),
-                            spaceBefore=15
-                        )
-
-                        elements = []
-
-                        # 添加标题
-                        elements.append(platypus.Paragraph(f"错题集 - {file_suffix}", title_style))
-                        elements.append(platypus.Spacer(1, 12))
-
-                        # 遍历每道题目
-                        for i, question in enumerate(full_data, 1):
-                            if content_type == "questions":
-                                # 导出题目部分
-                                # 题目标题
-                                elements.append(platypus.Paragraph(f"题目 {i}: {question['subject']} - {question['question_type']}", heading_style))
-
-                                # 题目内容
-                                elements.append(platypus.Paragraph(question["question_text"], style_sheet['Normal']))
-                            else:
-                                # 导出答案部分
-                                # 标题简化显示题号
-                                elements.append(platypus.Paragraph(f"题目 {i} 答案:", heading_style))
-
-                                # 显示答案
-                                elements.append(platypus.Paragraph(f"<b><font color='#008000'>正确答案:</font></b> {question['answer']}", style_sheet['Normal']))
-
-                                # 解析
-                                if question.get("explanation"):
-                                    elements.append(platypus.Spacer(1, 5))
-                                    elements.append(platypus.Paragraph("<b><font color='#4682B4'>解析:</font></b>", style_sheet['Normal']))
-                                    elements.append(platypus.Paragraph(question["explanation"], style_sheet['Normal']))
-
-                            # 添加分隔线
-                            if i < len(full_data):  # 最后一题不添加分隔线
-                                elements.append(platypus.Spacer(1, 10))
-
-                                # 创建简单表格作为分隔线
-                                data = [['']]
-                                line_table = platypus.Table(data, colWidths=[450], rowHeights=[1])
-                                line_table.setStyle([('LINEABOVE', (0, 0), (-1, -1), 1, colors.gray)])
-                                elements.append(line_table)
-
-                                elements.append(platypus.Spacer(1, 15))
-
-                        # 生成PDF
-                        doc.build(elements)
-                        success_msg = f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至PDF文件，请点击下载"
-                        if missing_ids:
-                            success_msg += f" (注意: {len(missing_ids)} 条题目不存在，已跳过ID: {', '.join(missing_ids[:3])}{', ...' if len(missing_ids) > 3 else ''})"
-                        return success_msg, pdf_path, gr.update(visible=True)
-
-                    except Exception as e:
-                        logger.error(f"PDF导出过程中出错: {str(e)}")
-                        logger.error(traceback.format_exc())
-
-                        # 检查是否是ImportError
-                        if isinstance(e, ImportError):
-                            return f"❌ 导出PDF需要安装reportlab库，请使用命令：pip install reportlab", None, gr.update(visible=False)
-                        else:
-                            return f"❌ PDF导出失败: {str(e)}", None, gr.update(visible=False)
-
-                elif export_format == "Word":
-                    try:
-                        # 使用python-docx导出Word文档
-                        from docx import Document
-                        from docx.shared import RGBColor
-
-                        doc_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.docx")
-                        doc = Document()
-
-                        # 添加标题
-                        title = doc.add_heading(f"错题集 - {file_suffix}", 0)
-                        title.alignment = 1  # 居中对齐
-
-                        # 遍历每道题目
-                        for i, question in enumerate(full_data, 1):
-                            if content_type == "questions":
-                                # 导出题目部分
-                                # 题目标题
-                                heading = doc.add_heading(f"题目 {i}: {question['subject']} - {question['question_type']}", level=2)
-
-                                # 设置标题颜色为蓝色
-                                for run in heading.runs:
-                                    run.font.color.rgb = RGBColor(0, 102, 204)
-
-                                # 题目内容
-                                doc.add_paragraph(question["question_text"])
-                            else:
-                                # 导出答案部分
-                                # 标题
-                                heading = doc.add_heading(f"题目 {i} 答案:", level=2)
-
-                                # 设置标题颜色为蓝色
-                                for run in heading.runs:
-                                    run.font.color.rgb = RGBColor(0, 102, 204)
-
-                                # 答案
-                                p = doc.add_paragraph()
-                                correct_run = p.add_run("正确答案: ")
-                                correct_run.bold = True
-                                correct_run.font.color.rgb = RGBColor(0, 128, 0)  # 绿色
-                                p.add_run(question['answer'])
-
-                                # 解析
-                                if question.get("explanation"):
-                                    p = doc.add_paragraph()
-                                    explain_run = p.add_run("解析: ")
-                                    explain_run.bold = True
-                                    explain_run.font.color.rgb = RGBColor(70, 130, 180)  # 钢蓝色
-                                    p.add_run(question["explanation"])
-
-                            # 除最后一题外，添加分隔线
-                            if i < len(full_data):
-                                doc.add_paragraph("_" * 50)
-
-                        # 保存文档
-                        doc.save(doc_path)
-                        success_msg = f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至Word文档，请点击下载"
-                        if missing_ids:
-                            success_msg += f" (注意: {len(missing_ids)} 条题目不存在，已跳过ID: {', '.join(missing_ids[:3])}{', ...' if len(missing_ids) > 3 else ''})"
-                        return success_msg, doc_path, gr.update(visible=True)
-                    except ImportError:
-                        return "❌ 导出Word需要安装python-docx库，请使用命令：pip install python-docx", None, gr.update(visible=False)
-                    except Exception as e:
-                        logger.error(f"Word导出失败: {str(e)}")
-                        logger.error(traceback.format_exc())
-                        return f"❌ Word导出失败: {str(e)}", None, gr.update(visible=False)
-
-                elif export_format == "图片(A4)":
-                    try:
-                        # 使用PIL生成A4尺寸的可打印图片
-                        from PIL import Image, ImageDraw, ImageFont
-                        import math
-                        import zipfile
-
-                        # 创建图片保存目录
-                        img_dir = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}")
-                        os.makedirs(img_dir, exist_ok=True)
-
-                        # A4纸像素尺寸（300DPI）
-                        width, height = 2480, 3508  # A4尺寸，300DPI
-
-                        # 计算需要多少页
-                        items_per_page = 3  # 每页题目数
-                        total_pages = math.ceil(len(full_data) / items_per_page)
-
-                        # 字体设置 - 使用更通用的字体路径或内置字体
-                        # 尝试多种字体路径以提高兼容性
-                        font_paths = [
-                            # Windows 字体路径
-                            "C:/Windows/Fonts/simhei.ttf",
-                            "C:/Windows/Fonts/simsun.ttc",
-                            # Linux 字体路径
-                            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-                            # macOS 字体路径
-                            "/System/Library/Fonts/PingFang.ttc",
-                            # 项目内字体（如果有）
-                            os.path.join(os.getcwd(), "fonts", "simhei.ttf"),
-                        ]
-
-                        # 尝试加载字体，直到成功或全部失败
-                        title_font = None
-                        heading_font = None
-                        normal_font = None
-
-                        for font_path in font_paths:
-                            if os.path.exists(font_path):
-                                try:
-                                    title_font = ImageFont.truetype(font_path, 60)
-                                    heading_font = ImageFont.truetype(font_path, 45)
-                                    normal_font = ImageFont.truetype(font_path, 35)
-                                    logger.info(f"成功加载字体: {font_path}")
-                                    break
-                                except Exception as e:
-                                    logger.error(f"加载字体 {font_path} 失败: {e}")
-                                    continue
-
-                        # 如果所有字体都加载失败，使用默认字体
-                        if title_font is None:
-                            logger.warning("无法加载任何中文字体，使用默认字体")
-                            title_font = ImageFont.load_default()
-                            heading_font = ImageFont.load_default()
-                            normal_font = ImageFont.load_default()
-
-                        # 生成的图片路径列表
-                        image_paths = []
-
-                        # 生成每一页
-                        for page in range(total_pages):
-                            # 创建空白图片（白色背景）
-                            img = Image.new('RGB', (width, height), (255, 255, 255))
-                            draw = ImageDraw.Draw(img)
-
-                            # 绘制标题和页眉线条
-                            draw.text((width//2 - 250, 100), f"错题集 - {file_suffix}", font=title_font, fill=(0, 51, 153))  # 深蓝色标题
-                            draw.line([(80, 170), (width-80, 170)], fill=(0, 102, 204), width=2)  # 蓝色分隔线
-
-                            # 当前页的题目
-                            start_idx = page * items_per_page
-                            end_idx = min(start_idx + items_per_page, len(full_data))
-                            current_questions = full_data[start_idx:end_idx]
-
-                            # 绘制每道题目
-                            y_position = 250
-                            for i, question in enumerate(current_questions, start_idx + 1):
-                                if content_type == "questions":
-                                    # 题目部分
-                                    # 题目标题 - 使用蓝色
-                                    title_text = f"题目 {i}: {question['subject']} - {question['question_type']}"
-                                    draw.text((100, y_position), title_text, font=heading_font, fill=(0, 102, 204))
-                                    y_position += 70
-
-                                    # 题目内容
-                                    content_text = question["question_text"]
-
-                                    # 手动处理文本换行 - 简化处理
-                                    # 每行最大字符数（根据字体大小估算）
-                                    max_chars_per_line = 65
-
-                                    # 分行处理
-                                    lines = []
-                                    for paragraph in content_text.split('\n'):
-                                        if len(paragraph) <= max_chars_per_line:
-                                            lines.append(paragraph)
-                                        else:
-                                            # 长段落按字符数分行
-                                            for j in range(0, len(paragraph), max_chars_per_line):
-                                                lines.append(paragraph[j:j+max_chars_per_line])
-
-                                    # 绘制题目内容
-                                    for line in lines:
-                                        draw.text((100, y_position), line, font=normal_font, fill=(0, 0, 0))
-                                        y_position += 45
-                                else:
-                                    # 答案部分
-                                    # 标题
-                                    title_text = f"题目 {i} 答案:"
-                                    draw.text((100, y_position), title_text, font=heading_font, fill=(0, 102, 204))
-                                    y_position += 70
-
-                                    # 答案
-                                    draw.text((100, y_position), "正确答案:", font=normal_font, fill=(0, 128, 0))  # 绿色
-                                    draw.text((300, y_position), question['answer'], font=normal_font, fill=(0, 0, 0))
-                                    y_position += 70
-
-                                    # 解析
-                                    if question.get("explanation"):
-                                        draw.text((100, y_position), "解析:", font=normal_font, fill=(70, 130, 180))  # 钢蓝色
-                                        y_position += 50
-
-                                        # 分行处理解析文本
-                                        explanation_lines = []
-                                        max_chars = 65  # 每行最大字符数
-                                        for paragraph in question["explanation"].split('\n'):
-                                            if len(paragraph) <= max_chars:
-                                                explanation_lines.append(paragraph)
-                                            else:
-                                                for j in range(0, len(paragraph), max_chars):
-                                                    explanation_lines.append(paragraph[j:j+max_chars])
-
-                                        for line in explanation_lines:
-                                            draw.text((100, y_position), line, font=normal_font, fill=(0, 0, 0))
-                                            y_position += 45
-
-                                # 添加分隔线
-                                y_position += 50
-                                draw.line([(150, y_position), (width-150, y_position)], fill=(200, 200, 200), width=1)
-                                y_position += 60
-
-                            # 添加页码和页脚线
-                            draw.line([(80, height-150), (width-80, height-150)], fill=(0, 102, 204), width=1)
-                            draw.text((width//2 - 80, height - 100), f"第 {page+1}/{total_pages} 页",
-                                    font=normal_font, fill=(102, 102, 102))
-
-                            # 保存图片
-                            img_path = os.path.join(img_dir, f"错题_{file_suffix}_第{page+1}页.png")
-                            img.save(img_path, "PNG")
-                            image_paths.append(img_path)
-
-                        # 创建ZIP文件以供下载
-                        zip_path = os.path.join(export_dir, f"错题_{file_suffix}_{timestamp}.zip")
-                        with zipfile.ZipFile(zip_path, 'w') as zipf:
-                            for img_path in image_paths:
-                                # 仅添加文件名而非完整路径
-                                zipf.write(img_path, os.path.basename(img_path))
-
-                        success_msg = f"✅ 已成功导出 {len(full_data)} 条错题{file_suffix}至 {total_pages} 页图片，请点击下载"
-                        if missing_ids:
-                            success_msg += f" (注意: {len(missing_ids)} 条题目不存在，已跳过ID: {', '.join(missing_ids[:3])}{', ...' if len(missing_ids) > 3 else ''})"
-                        return success_msg, zip_path, gr.update(visible=True)
-                    except ImportError:
-                        return "❌ 导出图片需要安装Pillow库，请使用命令：pip install Pillow", None, gr.update(visible=False)
-                    except Exception as e:
-                        logger.error(f"导出图片时出错: {str(e)}")
-                        logger.error(traceback.format_exc())
-                        return f"❌ 导出图片时出错: {str(e)}", None, gr.update(visible=False)
-
-                else:
-                    return f"❌ 不支持的导出格式: {export_format}", None, gr.update(visible=False)
-
-            except Exception as e:
-                logger.error(f"导出失败: {str(e)}")
-                logger.error(traceback.format_exc())
-                return f"❌ 导出失败: {str(e)}", None, gr.update(visible=False)
-
-        # 分别导出题目和答案的函数
-        def export_questions(dataframe, export_format):
-            return export_results(dataframe, export_format, content_type="questions")
-
-        def export_answers(dataframe, export_format):
-            return export_results(dataframe, export_format, content_type="answers")
-
         # 返回列表视图
         def back_to_list():
             return [
-                gr.update(visible=False),  # 修改：使用gr.update来控制Group的可见性
+                gr.update(visible=False),  # 使用gr.update来控制Group的可见性
                 False,                     # edit_mode
                 "",                        # detail_markdown
                 "",                        # subject_display
@@ -1177,47 +609,9 @@ def create_search_page():
             ]
 
         # 直接删除错题函数
-        # def direct_delete(question_id):
-        #     if not question_id:
-        #         return "请先选择要删除的错题", query_status.value, results.value, gr.update(visible=False)
-
-        #     try:
-        #         # 确保 question_id 是整数
-        #         try:
-        #             question_id = int(question_id) if question_id else None
-        #         except (ValueError, TypeError):
-        #             return f"❌ 删除失败：无效的错题ID {question_id}", query_status.value, results.value, gr.update(visible=False)
-
-        #         # 在删除之前先检查错题是否存在
-        #         question = db.get_error_question(question_id)
-        #         if not question:
-        #             return f"❌ 删除失败：未找到ID为 {question_id} 的错题", query_status.value, results.value, gr.update(visible=False)
-
-        #         # 执行删除操作
-        #         success = db.delete_error_question(question_id)
-
-        #         # 获取最新数据
-        #         refresh_msg, refreshed_data = load_all_data()
-
-        #         if success:
-        #             return f"✅ 成功删除错题(ID: {question_id})", refresh_msg, refreshed_data, gr.update(visible=False)
-        #         else:
-        #             return f"❌ 删除失败：操作未成功完成", refresh_msg, refreshed_data, gr.update(visible=False)
-
-        #     except Exception as e:
-        #         logger.error(f"删除错题时出错: {str(e)}")
-        #         logger.error(traceback.format_exc())
-
-        #         # 尝试刷新数据
-        #         try:
-        #             refresh_msg, refreshed_data = load_all_data()
-        #             return f"❌ 删除错题时出错: {str(e)}", refresh_msg, refreshed_data, gr.update(visible=False)
-        #         except:
-        #             empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
-        #             return f"❌ 删除错题时出错: {str(e)}", "加载数据失败", empty_df, gr.update(visible=False)
         def direct_delete(question_id):
             if not question_id:
-                return "请先选择要删除的错题", query_status.value, results.value, gr.update(visible=False)  # 修改：使用gr.update控制可见性
+                return "请先选择要删除的错题", query_status.value, results.value, gr.update(visible=False)
             
             try:
                 # 删除错题
@@ -1244,7 +638,82 @@ def create_search_page():
                 except:
                     empty_df = pd.DataFrame(columns=["题目ID", "题目内容", "科目", "题型", "难度", "提交时间"])
                     return f"❌ 删除错题时出错: {str(e)}", "加载数据失败", empty_df, gr.update(visible=False)
-        # 保存编辑的处理函数
+            
+        # 导出题目处理函数
+        def export_questions_handler(questions_df, export_format):
+            """导出题目处理函数"""
+            if questions_df is None or len(questions_df) == 0:
+                return "没有数据可导出", gr.update(visible=False)
+            
+            try:
+                # 使用process_dataframe_structure处理df_value
+                questions_df = process_dataframe_structure(questions_df)
+                
+                # 获取题目ID列表
+                question_ids = questions_df["题目ID"].tolist()
+                
+                # 从数据库获取完整题目数据
+                questions = [db.get_error_question(qid) for qid in question_ids if qid]
+                questions = [q for q in questions if q]  # 过滤掉None值
+                
+                if not questions:
+                    return "没有有效的题目可导出", gr.update(visible=False)
+                
+                # 使用导出管理器导出题目
+                output_path, status_message = export_mgr.export_questions(
+                    questions, 
+                    export_format, 
+                    include_answers=False
+                )
+                
+                if not output_path:
+                    return status_message, gr.update(visible=False)
+                
+                return status_message, gr.update(value=output_path, visible=True)
+                
+            except Exception as e:
+                logger.error(f"导出题目时出错: {str(e)}")
+                logger.error(traceback.format_exc())
+                return f"导出题目时出错: {str(e)}", gr.update(visible=False)
+
+        # 导出答案处理函数
+        def export_answers_handler(questions_df, export_format):
+            """导出答案处理函数"""
+            if questions_df is None or len(questions_df) == 0:
+                return "没有数据可导出", gr.update(visible=False)
+            
+            try:
+                # 使用process_dataframe_structure处理df_value
+                questions_df = process_dataframe_structure(questions_df)
+                
+                # 获取题目ID列表
+                question_ids = questions_df["题目ID"].tolist()
+                
+                # 从数据库获取完整题目数据
+                questions = [db.get_error_question(qid) for qid in question_ids if qid]
+                questions = [q for q in questions if q]  # 过滤掉None值
+                
+                if not questions:
+                    return "没有有效的题目可导出", gr.update(visible=False)
+                
+                # 使用导出管理器导出题目（包含答案）
+                output_path, status_message = export_mgr.export_questions(
+                    questions, 
+                    export_format, 
+                    include_answers=True
+                )
+                
+                if not output_path:
+                    return status_message, gr.update(visible=False)
+                
+                return status_message, gr.update(value=output_path, visible=True)
+                
+            except Exception as e:
+                logger.error(f"导出答案时出错: {str(e)}")
+                logger.error(traceback.format_exc())
+                return f"导出答案时出错: {str(e)}", gr.update(visible=False)
+                
+        # 处理保存编辑的结果
         def handle_save_edit(
             question_id,
             question_text,
@@ -1352,10 +821,11 @@ def create_search_page():
                 selected_row_index,
                 selected_question_id,
                 explanation_edit,
-                question_detail_group,  # 确保这里包含了question_detail_group
-                edit_mode_group  # 确保这里包含了edit_mode_group
+                question_detail_group,  # 包含question_detail_group
+                edit_mode_group  # 包含edit_mode_group
             ]
         )
+        
         # 编辑模式切换
         edit_toggle_button.click(
             toggle_edit_mode,
@@ -1403,6 +873,8 @@ def create_search_page():
                 save_button
             ]
         )
+        
+        # 返回列表事件
         back_button.click(
             back_to_list,
             None,
@@ -1428,27 +900,28 @@ def create_search_page():
             ]
         )
 
-        # 修改导出题目按钮绑定 - 增加文件下载组件作为输出
+        # 导出题目按钮事件
         export_questions_button.click(
-            export_questions,
+            export_questions_handler,
             inputs=[results, export_format],
-            outputs=[status, download_file, download_file]  # 第一个参数控制文件内容，第二个参数控制可见性
+            outputs=[status, download_file]
         )
 
-        # 修改导出答案按钮绑定 - 增加文件下载组件作为输出
+        # 导出答案按钮事件
         export_answers_button.click(
-            export_answers,
+            export_answers_handler,
             inputs=[results, export_format],
-            outputs=[status, download_file, download_file]  # 第一个参数控制文件内容，第二个参数控制可见性
+            outputs=[status, download_file]
         )
 
-        # 删除按钮使用直接删除函数
+        # 删除按钮事件
         delete_button.click(
             direct_delete,
-            inputs=[selected_question_id],  # 确保这里使用的是 selected_question_id
+            inputs=[selected_question_id],
             outputs=[status, query_status, results, question_detail_group]
         )
 
+        # 刷新按钮事件
         refresh_button.click(
             load_all_data,
             outputs=[query_status, results]
