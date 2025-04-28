@@ -21,7 +21,7 @@ def get_mime_type(file_path):
     return mime_types.get(extension, 'image/png')
 
 # 读取本地图片并转换为base64
-image_path = "f:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
+image_path = "e:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
 base64_image = encode_image_to_base64(image_path)
 mime_type = get_mime_type(image_path)
 image_url = f"data:{mime_type};base64,{base64_image}"
@@ -67,7 +67,7 @@ use_stream = False
 response = requests.post(
     url="https://openrouter.ai/api/v1/chat/completions",
     headers={
-        "Authorization": "Bearer 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",
+        "Authorization": "Bearer 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",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/traefan/book_practice",
     },

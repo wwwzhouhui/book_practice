@@ -21,7 +21,7 @@ def get_mime_type(file_path):
     return mime_types.get(extension, 'image/png')
 
 # 读取本地图片并转换为base64
-image_path = "f:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
+image_path = "e:\\work\\code\\AIcode\\book_practice\\resources\\错题本原始资料20250411\\原始试卷1.png"
 base64_image = encode_image_to_base64(image_path)
 mime_type = get_mime_type(image_path)
 image_url = f"data:{mime_type};base64,{base64_image}"
@@ -65,14 +65,15 @@ use_stream = False
 
 # 发送请求
 response = requests.post(
-    url="https://api.302.ai/v1/chat/completions",
+    #url="https://api.302.ai/v1/chat/completions",
+    url="https://geminicloudflare.duckcloud.fun/v1/chat/completions",
     headers={
-        "Authorization": "Bearer sk-Udf6lsiyUIExHTrE0kXxAXpYemjY9SzvU0EXmYbgbUSlzCeE",
+        "Authorization": "Bearer AIzaSyCwwC5WzlWglWvYfpp0yERUeJPiLmKM8R4",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/traefan/book_practice",
     },
     json={
-        "model": "gemini-2.0-flash-lite-preview-02-05",
+        "model": "gemini-2.5-pro-preview-03-25",
         "stream": use_stream,
         "messages": [
             {

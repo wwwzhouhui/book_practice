@@ -10,3 +10,10 @@ __pycache__/*
 *.json
 data/homework.db
 results/*.json
+test_gemini2.py
+testgemini3.py
+testgemini3for302.py
+testgemini4.py
+testgemini5.py
+data/homework.db
+testgemini3.py

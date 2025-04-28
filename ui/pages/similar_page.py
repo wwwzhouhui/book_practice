@@ -158,15 +158,61 @@ def create_similar_page():
 
         def generate_similar_questions(selected_count, gen_count):
             """生成同类题"""
+            # Gradio 组件的更新应通过函数返回值完成，而不是直接调用 update
+
             try:
-                # 获取选中的错题
-                question_ids = selected_count
+                # 获取选中的错题ID (selected_count seems to hold the ID string directly)
+                if not selected_count:
+                     gr.Warning("请先选择一个原始题目！")
+                     # Return values should match the function's expected output signature
+                     return (
+                         "请先选择题目",
+                         gr.update(value=pd.DataFrame(columns=["题目内容", "答案", "解析"])), # Keep table empty
+                         gr.update(interactive=False),  # save_btn
+                         gr.update(interactive=False),  # export_questions_btn
+                         gr.update(interactive=False)   # export_answers_btn
+                     )
+
+                # Assuming selected_count is a single ID string, convert to list of int
+                try:
+                    question_ids = [int(selected_count)]
+                except ValueError:
+                     logger.error(f"无法将选中的ID '{selected_count}' 转换为整数。")
+                     gr.Warning("选中的题目ID无效！")
+                     return (
+                         "无效的题目ID",
+                         gr.update(value=pd.DataFrame(columns=["题目内容", "答案", "解析"])), # Keep table empty
+                         gr.update(interactive=False),  # save_btn
+                         gr.update(interactive=False),  # export_questions_btn
+                         gr.update(interactive=False)   # export_answers_btn
+                     )
+
                 source_questions = [db.get_error_question(qid) for qid in question_ids]
-                
+
+                # Filter out None results if get_error_question can return None
+                source_questions = [q for q in source_questions if q]
+                if not source_questions:
+                    gr.Warning("无法找到选中的原始题目信息！")
+                    return (
+                         "无法找到题目信息",
+                         gr.update(value=pd.DataFrame(columns=["题目内容", "答案", "解析"])), # Keep table empty
+                         gr.update(interactive=False),  # save_btn
+                         gr.update(interactive=False),  # export_questions_btn
+                         gr.update(interactive=False)   # export_answers_btn
+                     )
+
+                # 显式将 gen_count 转换为整数
+                try:
+                    num_to_generate = int(gen_count)
+                except (TypeError, ValueError):
+                    logger.error(f"无效的生成数量: {gen_count}, 将使用默认值 1")
+                    gr.Warning(f"无效的生成数量 '{gen_count}'，已重置为 1")
+                    num_to_generate = 1 # 或者返回错误
+
                 # 生成同类题
                 generated = generator.generate_similar_questions(
                     source_questions,
-                    count=gen_count
+                    count=num_to_generate # 使用转换后的整数值
                 )
                 
                 if not generated:
