@@ -32,6 +32,7 @@ class PDFExporter(BaseExporter):
             # 定义中文字体和数学字体
             self.chinese_font_name = None
             self.math_font_name = None
+            self.symbol_font_name = None  # 新增符号字体
             self.fallback_font_name = None
             
             # 尝试加载中文字体
@@ -58,6 +59,17 @@ class PDFExporter(BaseExporter):
                 ("Arial Unicode MS", os.path.join(os.getcwd(), "fonts", "ARIALUNI.TTF")),
             ]
             
+            # 尝试加载符号字体（包含星号等特殊符号）
+            symbol_fonts = [
+                # Windows常见符号字体
+                ("Segoe UI Symbol", "C:/Windows/Fonts/seguisym.ttf"),
+                ("Arial Unicode MS", "C:/Windows/Fonts/ARIALUNI.TTF"),
+                ("SimSun", "C:/Windows/Fonts/simsun.ttc"),  # 宋体也包含一些符号
+                # 项目本地字体
+                ("Segoe UI Symbol", os.path.join(os.getcwd(), "fonts", "seguisym.ttf")),
+                ("Arial Unicode MS", os.path.join(os.getcwd(), "fonts", "ARIALUNI.TTF")),
+            ]
+            
             # 注册并选择中文字体
             for font_name, font_path in chinese_fonts:
                 if os.path.exists(font_path):
@@ -80,6 +92,17 @@ class PDFExporter(BaseExporter):
                     except Exception as e:
                         logger.warning(f"注册字体 {font_name} 失败: {str(e)}")
             
+            # 注册并选择符号字体
+            for font_name, font_path in symbol_fonts:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        logger.info(f"已注册符号字体: {font_name} ({font_path})")
+                        if self.symbol_font_name is None:
+                            self.symbol_font_name = font_name
+                    except Exception as e:
+                        logger.warning(f"注册字体 {font_name} 失败: {str(e)}")
+            
             # 如果没有找到中文字体，使用内置字体
             if self.chinese_font_name is None:
                 logger.warning("未找到中文字体，使用默认字体")
@@ -89,6 +112,11 @@ class PDFExporter(BaseExporter):
             if self.math_font_name is None:
                 logger.warning("未找到数学字体，使用中文字体代替")
                 self.math_font_name = self.chinese_font_name
+            
+            # 如果没有找到符号字体，使用中文字体
+            if self.symbol_font_name is None:
+                logger.warning("未找到符号字体，使用中文字体代替")
+                self.symbol_font_name = self.chinese_font_name
                 
             # 设置通用回退字体
             self.fallback_font_name = "Helvetica"
@@ -101,12 +129,16 @@ class PDFExporter(BaseExporter):
             # 出现错误时设置默认字体
             self.chinese_font_name = "Helvetica"
             self.math_font_name = "Helvetica"
+            self.symbol_font_name = "Helvetica"
             self.fallback_font_name = "Helvetica"
     
     def _create_symbol_mappings(self):
         """创建符号映射，用于识别特殊字符"""
         # 数学符号列表
         self.math_symbols = set('∫∑∏∂∇Δδεθλμπστφω∞±×÷=≠≈≤≥√∛∜¹²³⁴⁵⁶⁷⁸⁹⁰ⁿ₁₂₃₄₅₆₇₈₉₀∈∉∋∌⊂⊃⊆⊇⊄⊅⊊⊋∪∩⊎⊖⊕⊗⊘⊙∀∃∄∴∵∝')
+        
+        # 特殊符号列表（包括星号等）
+        self.special_symbols = set('★☆✓✗✘✔✖✚✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❄❅❆❇❈❉❊❋❌❍❎❏❐❑❒▲△▼▽◆◇○◎●◐◑◒◓◔◕◖◗◘◙◚◛◜◝◞◟◠◡◢◣◤◥◦◧◨◩◪◫◬◭◮◯')
         
         # 常见上标、下标、分数符号
         self.superscript_map = {
@@ -152,66 +184,29 @@ class PDFExporter(BaseExporter):
         
         # 特殊处理标点符号
         self.special_punctuation = set('，。、；：""''（）【】《》？！…—')
+        
+        # 星号符号范围（包括★等）
+        self.star_symbol_ranges = [
+            (0x2605, 0x2606),   # 黑五角星和白五角星
+            (0x2729, 0x274B),   # 各种星形符号
+        ]
     
-    def _create_styles(self):
-        """创建文档样式"""
-        styles = getSampleStyleSheet()
+    def _is_symbol_char(self, char):
+        """判断是否为特殊符号字符"""
+        if not char:
+            return False
         
-        # 创建自定义样式 - 中文
-        styles.add(ParagraphStyle(
-            name='ChineseTitle',
-            fontName=self.chinese_font_name,
-            fontSize=18,
-            alignment=TA_CENTER,
-            spaceAfter=12,
-            leading=22  # 行间距增加
-        ))
+        # 检查是否在特殊符号集中
+        if char in self.special_symbols:
+            return True
         
-        styles.add(ParagraphStyle(
-            name='ChineseHeading2',
-            fontName=self.chinese_font_name,
-            fontSize=14,
-            textColor=colors.blue,
-            spaceAfter=6,
-            leading=18  # 行间距增加
-        ))
+        # 检查是否是星号符号
+        codepoint = ord(char)
+        for start, end in self.star_symbol_ranges:
+            if start <= codepoint <= end:
+                return True
         
-        styles.add(ParagraphStyle(
-            name='ChineseHeading3',
-            fontName=self.chinese_font_name,
-            fontSize=12,
-            textColor=colors.green,
-            spaceAfter=6,
-            leading=16  # 行间距增加
-        ))
-        
-        styles.add(ParagraphStyle(
-            name='ChineseHeading3Blue',
-            fontName=self.chinese_font_name,
-            fontSize=12,
-            textColor=colors.steelblue,
-            spaceAfter=6,
-            leading=16  # 行间距增加
-        ))
-        
-        # 修改Normal样式以使用中文字体
-        styles["Normal"].fontName = self.chinese_font_name
-        styles["Normal"].leading = 16  # 增加行间距
-        
-        # 创建混合字体样式，增加行间距和字间距
-        styles.add(ParagraphStyle(
-            name='MixedContent',
-            fontName=self.chinese_font_name,  # 默认使用中文字体
-            fontSize=12,
-            spaceAfter=6,
-            leading=16,  # 增加行间距
-            wordSpacing=1.2,  # 增加字间距
-            charSpace=0.1,    # 增加字符间距
-            allowWidows=1,    # 允许段落最后一行单独出现在下一页
-            allowOrphans=1    # 允许段落第一行单独出现在上一页
-        ))
-        
-        return styles
+        return False
     
     def _is_chinese_char(self, char):
         """判断是否为中文字符"""
@@ -249,154 +244,114 @@ class PDFExporter(BaseExporter):
         
         return False
     
-    def _is_math_context(self, text, pos, window=5):
-        """检查字符是否处于数学上下文中"""
-        if not text or pos >= len(text):
-            return False
+    def _is_math_context(self, text, position):
+        """判断当前位置是否处于数学上下文中"""
+        # 简单判断：检查前后是否有数学符号
+        window_size = 5  # 检查前后5个字符
         
-        start = max(0, pos - window)
-        end = min(len(text), pos + window + 1)
+        # 获取前后字符
+        start = max(0, position - window_size)
+        end = min(len(text), position + window_size + 1)
         context = text[start:end]
         
-        # 检查上下文中的数学符号数量
-        math_count = sum(1 for c in context if self._is_math_char(c))
-        
-        # 特定数学表达式的模式
-        math_patterns = [
-            r'[a-zA-Z]\^[0-9]',     # 指数表示：a^2
-            r'[a-zA-Z]_[0-9]',      # 下标表示：a_1
-            r'[0-9]+\.[0-9]+',      # 小数：3.14
-            r'[0-9]+/[0-9]+',       # 分数：1/2
-            r'[+\-*/=<>]',          # 运算符
-            r'\([^)]*\)',           # 括号表达式
-            r'\[[^]]*\]',           # 方括号表达式
-            r'\{[^}]*\}'            # 花括号表达式
-        ]
-        
-        # 如果上下文中包含足够的数学符号或匹配数学模式
-        if math_count >= 2:
-            return True
-        
-        for pattern in math_patterns:
-            if re.search(pattern, context):
+        # 检查上下文中是否包含数学符号
+        for char in context:
+            if self._is_math_char(char):
                 return True
         
+        # 检查是否在公式环境中（简单判断）
+        if '$' in context or '\\(' in context or '\\)' in context or '\\[' in context or '\\]' in context:
+            return True
+            
         return False
     
     def _prepare_text_for_pdf(self, text):
-        """预处理文本，使其适合PDF渲染"""
+        """预处理文本，确保PDF兼容性"""
         if not text:
-            return text
-        
+            return ""
+            
         # 替换特殊字符
-        for old, new in self.char_replacement.items():
-            text = text.replace(old, new)
-        
-        # 处理HTML特殊字符，防止被解释为标签
-        text = text.replace('&', '&amp;')
-        text = text.replace('<', '&lt;')
-        text = text.replace('>', '&gt;')
-        
-        # 确保上标下标符号正确显示
-        # 这部分代码保留原样，不应替换成HTML实体
+        for old_char, new_char in self.char_replacement.items():
+            text = text.replace(old_char, new_char)
+            
+        # 处理HTML实体
+        text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
         
         return text
     
-    def _segment_text(self, text):
-        """将文本分段，识别中文、数学和混合部分"""
-        if not text:
-            return []
+    def _create_styles(self):
+        """创建PDF文档使用的样式"""
+        styles = getSampleStyleSheet()
         
-        # 预处理文本
-        text = self._prepare_text_for_pdf(text)
+        # 中文标题样式
+        styles.add(ParagraphStyle(
+            name='ChineseTitle',
+            fontName=self.chinese_font_name,
+            fontSize=18,
+            leading=22,
+            alignment=TA_CENTER,
+            spaceAfter=6
+        ))
         
-        # 记录各段落及其类型
-        segments = []
-        current_segment = ""
-        current_type = "normal"  # 默认为普通文本
+        # 中文二级标题样式
+        styles.add(ParagraphStyle(
+            name='ChineseHeading2',
+            fontName=self.chinese_font_name,
+            fontSize=14,
+            leading=18,
+            spaceAfter=6
+        ))
         
-        i = 0
-        while i < len(text):
-            char = text[i]
-            
-            # 确定当前字符类型
-            if self._is_chinese_char(char):
-                char_type = "chinese"
-            elif self._is_math_char(char) or self._is_math_context(text, i):
-                char_type = "math"
-            elif char.isalpha() or char.isdigit():
-                # 判断英文和数字是否处于数学上下文
-                if self._is_math_context(text, i):
-                    char_type = "math"
-                else:
-                    char_type = "normal"
-            else:
-                char_type = "normal"
-            
-            # 如果类型变化，保存当前段落
-            if char_type != current_type and current_segment:
-                segments.append((current_segment, current_type))
-                current_segment = ""
-                current_type = char_type
-            
-            # 添加当前字符到段落
-            current_segment += char
-            i += 1
+        # 中文三级标题样式
+        styles.add(ParagraphStyle(
+            name='ChineseHeading3',
+            fontName=self.chinese_font_name,
+            fontSize=12,
+            leading=14,
+            spaceAfter=3,
+            textColor=colors.black
+        ))
         
-        # 添加最后一个段落
-        if current_segment:
-            segments.append((current_segment, current_type))
+        # 中文三级标题样式（蓝色）
+        styles.add(ParagraphStyle(
+            name='ChineseHeading3Blue',
+            fontName=self.chinese_font_name,
+            fontSize=12,
+            leading=14,
+            spaceAfter=3,
+            textColor=colors.blue
+        ))
         
-        return segments
-    
-    def _apply_font_to_segments(self, segments):
-        """应用字体到已分段的文本"""
-        result = []
+        # 混合内容样式（支持中文、数学和符号）
+        styles.add(ParagraphStyle(
+            name='MixedContent',
+            fontName=self.chinese_font_name,  # 默认使用中文字体
+            fontSize=11,
+            leading=14,
+            spaceAfter=6,
+            allowWidows=0,
+            allowOrphans=0
+        ))
         
-        for segment, segment_type in segments:
-            if not segment.strip():
-                # 保留空白字符
-                result.append(segment)
-                continue
-            
-            if segment_type == "chinese":
-                font_name = self.chinese_font_name
-            elif segment_type == "math":
-                font_name = self.math_font_name
-            else:
-                # 普通文本使用中文字体
-                font_name = self.chinese_font_name
-            
-            # 添加字体标签
-            result.append(f'<span fontName="{font_name}">{segment}</span>')
+        # 数学公式样式
+        styles.add(ParagraphStyle(
+            name='MathFormula',
+            fontName=self.math_font_name,
+            fontSize=11,
+            leading=14,
+            spaceAfter=6
+        ))
         
-        return ''.join(result)
-    
-    def _robust_text_processing(self, text):
-        """强健的文本处理流程，确保所有文本正确渲染"""
-        if not text:
-            return text
+        # 符号样式
+        styles.add(ParagraphStyle(
+            name='SymbolStyle',
+            fontName=self.symbol_font_name,
+            fontSize=11,
+            leading=14,
+            spaceAfter=6
+        ))
         
-        try:
-            # 1. 分段识别文本
-            segments = self._segment_text(text)
-            
-            # 2. 应用合适的字体
-            processed_text = self._apply_font_to_segments(segments)
-            
-            # 3. 添加额外的安全处理
-            # 确保不会出现未关闭的标签
-            tag_pattern = r'<span fontName="([^"]+)">([^<]*)<\/span>'
-            if not all(re.match(tag_pattern, tag) for tag in re.findall(r'<span[^>]*>.*?</span>', processed_text)):
-                # 如果有不匹配的标签，回退到更安全的处理方式
-                logger.warning("检测到不匹配的标签，回退到安全模式")
-                processed_text = f'<span fontName="{self.chinese_font_name}">{text}</span>'
-            
-            return processed_text
-        except Exception as e:
-            logger.error(f"文本处理过程中出错: {str(e)}")
-            # 回退到最安全的处理方式
-            return f'<span fontName="{self.chinese_font_name}">{text}</span>'
+        return styles
     
     def export_questions(self, questions, output_path=None, include_answers=False):
         """
@@ -455,17 +410,39 @@ class PDFExporter(BaseExporter):
                 
                 # 如果包含答案
                 if include_answers:
-                    # 答案标题
+                    # 正确答案标题和内容
                     elements.append(Paragraph(
                         self._robust_text_processing("正确答案:"), 
                         styles["ChineseHeading3"]
                     ))
                     
-                    # 答案内容
-                    answer_text = question.get("correct_answer", "")
+                    # 获取正确答案内容
+                    answer_text = ""
+                    if "correct_answer" in question:
+                        answer_text = str(question["correct_answer"])
+                    elif "answer" in question:  # 兼容其他可能的答案字段名
+                        answer_text = str(question["answer"])
+                    
+                    # 如果答案为空，尝试从选项中获取（针对选择题）
+                    if not answer_text and question.get("question_type") == "选择题":
+                        options = question.get("options", {})
+                        correct_option = question.get("correct_option")
+                        if correct_option and correct_option in options:
+                            answer_text = f"{correct_option}. {options[correct_option]}"
+                    
+                    # 如果仍然为空，尝试从解析中提取
+                    if not answer_text and question.get("explanation"):
+                        explanation = question.get("explanation")
+                        # 尝试从解析中提取答案（通常在末尾）
+                        if "得" in explanation:
+                            answer_match = re.search(r'得[到]?\s*([^。，\n]+)', explanation)
+                            if answer_match:
+                                answer_text = answer_match.group(1).strip()
+                    
+                    # 处理答案文本并添加到文档
                     processed_answer = self._robust_text_processing(answer_text)
                     elements.append(Paragraph(processed_answer, styles["MixedContent"]))
-                    elements.append(Spacer(1, 6))  # 添加额外空间
+                    elements.append(Spacer(1, 6))
                     
                     # 如果有解析
                     if question.get("explanation"):
@@ -475,11 +452,26 @@ class PDFExporter(BaseExporter):
                             styles["ChineseHeading3Blue"]
                         ))
                         
-                        # 解析内容
+                        # 构建解析文本
+                        explanation_parts = []
+                        
+                        # 添加学生答案（使用红色字体和换行）
+                        if question.get("student_answer"):
+                            student_answer = question.get("student_answer", "")
+                            student_answer_text = f'<para><font color="red">学生答案：{student_answer}</font></para>'
+                            explanation_parts.append(student_answer_text)
+                            explanation_parts.append("<br/>")  # 添加额外的换行
+                        
+                        # 添加原有的解析内容
                         explanation_text = question.get("explanation", "")
-                        processed_explanation = self._robust_text_processing(explanation_text)
-                        elements.append(Paragraph(processed_explanation, styles["MixedContent"]))
-                        elements.append(Spacer(1, 6))  # 添加额外空间
+                        explanation_parts.append(explanation_text)
+                        
+                        # 将所有部分连接（使用HTML段落标签）
+                        final_text = "".join(explanation_parts)
+                        
+                        # 不对HTML标签进行处理，直接添加到文档
+                        elements.append(Paragraph(final_text, styles["MixedContent"]))
+                        elements.append(Spacer(1, 6))
                 
                 # 添加分隔线（除了最后一题）
                 if i < len(questions):
@@ -516,57 +508,175 @@ class PDFExporter(BaseExporter):
                     ))
                     
                     if include_answers:
-                        # 答案标题
+                        # 正确答案部分
                         safe_elements.append(Paragraph(
                             f'<span fontName="{self.chinese_font_name}">正确答案:</span>', 
                             styles["ChineseHeading3"]
                         ))
                         
-                        # 答案内容
+                        # 获取正确答案内容
+                        answer_text = ""
+                        if "correct_answer" in question:
+                            answer_text = str(question["correct_answer"])
+                        elif "answer" in question:
+                            answer_text = str(question["answer"])
+                        
+                        # 如果答案为空，尝试从选项中获取
+                        if not answer_text and question.get("question_type") == "选择题":
+                            options = question.get("options", {})
+                            correct_option = question.get("correct_option")
+                            if correct_option and correct_option in options:
+                                answer_text = f"{correct_option}. {options[correct_option]}"
+                        
+                        # 如果仍然为空，尝试从解析中提取
+                        if not answer_text and question.get("explanation"):
+                            explanation = question.get("explanation")
+                            if "得" in explanation:
+                                answer_match = re.search(r'得[到]?\s*([^。，\n]+)', explanation)
+                                if answer_match:
+                                    answer_text = answer_match.group(1).strip()
+                        
                         safe_elements.append(Paragraph(
-                            f'<span fontName="{self.chinese_font_name}">{question.get("correct_answer", "")}</span>', 
+                            f'<span fontName="{self.chinese_font_name}">{answer_text}</span>', 
                             styles["MixedContent"]
                         ))
+                        safe_elements.append(Spacer(1, 6))
                         
-                        # 解析
+                        # 解析部分
                         if question.get("explanation"):
                             safe_elements.append(Paragraph(
                                 f'<span fontName="{self.chinese_font_name}">解析:</span>', 
                                 styles["ChineseHeading3Blue"]
                             ))
                             
+                            # 构建解析文本
+                            explanation_parts = []
+                            if question.get("student_answer"):
+                                explanation_parts.append(f"学生答案：{question.get('student_answer')}")
+                            explanation_parts.append(question.get("explanation", ""))
+                            
+                            explanation_text = "\n".join(explanation_parts)
+                            
                             safe_elements.append(Paragraph(
-                                f'<span fontName="{self.chinese_font_name}">{question.get("explanation", "")}</span>', 
+                                f'<span fontName="{self.chinese_font_name}">{explanation_text}</span>', 
                                 styles["MixedContent"]
                             ))
+                            safe_elements.append(Spacer(1, 6))
                     
-                    # 分隔线
+                    # 添加分隔线（除了最后一题）
                     if i < len(questions):
                         safe_elements.append(Paragraph("_" * 50, styles["Normal"]))
                         safe_elements.append(Spacer(1, 12))
                 
-                # 尝试使用安全模式构建
+                # 尝试使用安全模式构建PDF
                 try:
-                    doc = SimpleDocTemplate(
-                        output_path,
-                        pagesize=A4,
-                        rightMargin=72,
-                        leftMargin=72,
-                        topMargin=72,
-                        bottomMargin=72
-                    )
                     doc.build(safe_elements)
                     logger.info(f"使用安全模式成功导出PDF到: {output_path}")
                 except Exception as safe_build_error:
                     logger.error(f"安全模式构建PDF也失败: {str(safe_build_error)}")
-                    raise
+                    raise Exception(f"无法导出PDF: {str(build_error)} -> {str(safe_build_error)}")
             
             return output_path
             
         except Exception as e:
-            logger.error(f"导出PDF失败: {str(e)}")
-            raise
+            logger.error(f"导出PDF时出错: {str(e)}")
+            raise e
 
+    def _segment_text(self, text):
+        """将文本分段，识别中文、数学和符号部分"""
+        if not text:
+            return []
+        
+        # 预处理文本
+        text = self._prepare_text_for_pdf(text)
+        
+        # 记录各段落及其类型
+        segments = []
+        current_segment = ""
+        current_type = "normal"  # 默认为普通文本
+        
+        i = 0
+        while i < len(text):
+            char = text[i]
+            
+            # 确定当前字符类型
+            if self._is_symbol_char(char):
+                char_type = "symbol"
+            elif self._is_chinese_char(char):
+                char_type = "chinese"
+            elif self._is_math_char(char) or self._is_math_context(text, i):
+                char_type = "math"
+            elif char.isalpha() or char.isdigit():
+                # 判断英文和数字是否处于数学上下文
+                if self._is_math_context(text, i):
+                    char_type = "math"
+                else:
+                    char_type = "normal"
+            else:
+                char_type = "normal"
+            
+            # 如果类型变化，保存当前段落
+            if char_type != current_type and current_segment:
+                segments.append((current_segment, current_type))
+                current_segment = ""
+                current_type = char_type
+            
+            # 添加当前字符到段落
+            current_segment += char
+            i += 1
+        
+        # 添加最后一个段落
+        if current_segment:
+            segments.append((current_segment, current_type))
+        
+        return segments
+    
+    def _apply_font_to_segments(self, segments):
+        """应用字体到已分段的文本"""
+        result = []
+        
+        for segment, segment_type in segments:
+            if not segment.strip():
+                # 保留空白字符
+                result.append(segment)
+                continue
+            
+            if segment_type == "chinese":
+                font_name = self.chinese_font_name
+            elif segment_type == "math":
+                font_name = self.math_font_name
+            elif segment_type == "symbol":
+                font_name = self.symbol_font_name
+            else:
+                # 普通文本使用中文字体
+                font_name = self.chinese_font_name
+            
+            # 添加字体标签
+            result.append(f'<span fontName="{font_name}">{segment}</span>')
+        
+        return ''.join(result)
+    
+    def _robust_text_processing(self, text):
+        """
+        对文本进行健壮处理，确保在PDF中正确显示
+        包括处理中文、数学符号和特殊符号
+        """
+        if not text:
+            return ""
+        
+        try:
+            # 分段处理文本
+            segments = self._segment_text(text)
+            
+            # 应用适当的字体
+            processed_text = self._apply_font_to_segments(segments)
+            
+            return processed_text
+        except Exception as e:
+            logger.warning(f"文本处理失败，使用简单处理: {str(e)}")
+            # 出错时使用简单处理
+            return f'<span fontName="{self.chinese_font_name}">{text}</span>'
+    
 def main():
     """测试函数"""
     exporter = PDFExporter()
